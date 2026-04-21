@@ -1,8 +1,10 @@
+import sys, os
+sys.path.append(os.path.abspath('./src/pipeline'))
+
 from utils import file_list, save_fits
 from astropy.io import fits
 from astropy.stats import sigma_clipped_stats
 import numpy as np
-import sys
 
 from sky import poly_sky_model, rbf_sky_model
 from masking import region_mask, simple_masking
@@ -96,7 +98,7 @@ class Process:
             n = format(i, '04')
             save_fits(self.path+'/pp','pp_'+self.obj+str(n),data=pp_img,hdr=hdr,ext_type=self.ext_type)
 
-    def sky_sub(self,pp_list, mask_list,i=int,model='polynomial',bin=64):
+    def sky_sub(self,pp_list, mask_list,i=int,order=2,model='polynomial',bin=64):
         if len(pp_list) != len(mask_list):
             raise ValueError(f'pp_list and mask_list are not same size!! {len(pp_list),len(mask_list)}')
         hdu = fits.open(pp_list[i])[0].data 
@@ -105,7 +107,7 @@ class Process:
         m_data = np.ma.masked_array(hdu, mask, dtype=np.float32)
         bkg=None
         if model == 'polynomial':
-            bkg = np.array(poly_sky_model(m_data,bin), dtype=np.float32)
+            bkg = np.array(poly_sky_model(m_data,bin,order=order), dtype=np.float32)
         elif model == 'rbf':
             if bin > 16:
                 raise ValueError("bin must be smaller than 16 at rbf modeling")
@@ -126,3 +128,4 @@ class Process:
         file = open(self.path+'/'+self.obj+'.sh', 'w')
         file.write(f'solve-field --index-dir /Users/jang-in-yeong/solve/index4100 --use-source-extractor -3 {ra} -4 {dec} -5 {radius} --no-plots *'+ext+' \nrm -rf *.xyls *.axy *.corr *.match *.new *.rdls *.solved; ulimit -n 4096')
         file.close()
+

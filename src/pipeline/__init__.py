@@ -1,3 +1,6 @@
+import sys, os
+sys.path.append(os.path.abspath('./src/pipeline'))
+
 from pipeline import frameproc
 from pipeline import masking
 from pipeline import sky

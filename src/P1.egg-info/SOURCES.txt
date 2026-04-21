@@ -11,5 +11,6 @@ src/pipeline/analysis.py
 src/pipeline/frameproc.py
 src/pipeline/masking.py
 src/pipeline/photometry.py
+src/pipeline/preprocess_new.py
 src/pipeline/sky.py
 src/pipeline/utils.py

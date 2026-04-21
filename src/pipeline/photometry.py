@@ -1,4 +1,5 @@
-import sys
+import sys, os
+sys.path.append(os.path.abspath('./src'))
 import numpy as np
 from astropy.table import Table
 from astropy.coordinates import SkyCoord
@@ -122,7 +123,7 @@ class Phot:
 
         return a, z0
 
-from masking import region_mask
+from pipeline.masking import region_mask
 def sb_limit_proc(path=str,obj=str,pix=float,color=str):
     hdu = fits.open(path+'/sky_subed/coadd.fits')[0].data
     mask = region_mask(hdu,1.,pix,ampglow=False)
@@ -131,4 +132,4 @@ def sb_limit_proc(path=str,obj=str,pix=float,color=str):
     a, zp = phot.phot_stdz(color, plot=True)
     
 
-sb_limit_proc('/volumes/ssd/test', 'M101',1.89,'r')
+#sb_limit_proc('/volumes/ssd/test', 'M101',1.89,'r')
