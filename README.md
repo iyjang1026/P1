@@ -39,6 +39,7 @@ Install P1 package
 ```bash 
 pip install -e .
 ```
+then packages are install.
 ---
 Select location And make folder with name you want. The folder must have named folder that is "LIGHT, DARK, BIAS." The names are must be writen by Capital Alphabet.
 
