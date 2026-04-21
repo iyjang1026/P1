@@ -3,7 +3,6 @@ from astropy.stats import sigma_clipped_stats
 from astropy.modeling import models, fitting
 from scipy.interpolate import Rbf
 import numpy as np
-import matplotlib.pyplot as plt
 import warnings
 import sys
 

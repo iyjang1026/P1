@@ -1,5 +1,7 @@
 numpy
 astropy
+astroquery
 photutils
 scipy
 scikit-image
+ray
