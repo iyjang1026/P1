@@ -34,8 +34,8 @@ Initial folder setting
 
 Install P1 package
 ---
--install or git clone this repository
--cd installed directory and type terminal this,
+1. install or git clone this repository
+2. cd installed directory and type terminal this,
 ```bash 
 pip install -e .
 ```
