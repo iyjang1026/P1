@@ -1,3 +1,20 @@
+Metadata-Version: 2.4
+Name: P1
+Version: 0.1.5
+Summary: K-DRIFT P1 data processing pipeline
+Author-email: In Yeong Jang <iyjang1026@kasi.re.kr>
+License-Expression: MIT
+Project-URL: Documentation, https://github.com/iyjang1026/P1_pipeline#readme
+Project-URL: Issues, https://github.com/iyjang1026/P1_pipeline/issues
+Project-URL: Source, https://github.com/iyjang1026/P1_pipeline
+Requires-Python: >=3.12
+Description-Content-Type: text/markdown
+Requires-Dist: numpy
+Requires-Dist: astropy
+Requires-Dist: photutils
+Requires-Dist: scipy
+Requires-Dist: scikit-image
+
 # astronomical_pipeline
 completed python based astronomical pipeline
 

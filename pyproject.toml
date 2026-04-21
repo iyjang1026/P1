@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "P1"
+version = "0.1.5"
+license = "MIT"
+description = "K-DRIFT P1 data processing pipeline"
+readme = "README.md"
+requires-python = ">=3.12"
+
+authors = [{ name = "In Yeong Jang", email = "iyjang1026@kasi.re.kr" }]
+dependencies = [
+	"numpy","astropy","photutils","scipy","scikit-image",
+]
+
+[project.urls]
+Documentation = "https://github.com/iyjang1026/P1_pipeline#readme"
+Issues = "https://github.com/iyjang1026/P1_pipeline/issues"
+Source = "https://github.com/iyjang1026/P1_pipeline"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
