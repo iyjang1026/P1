@@ -16,9 +16,9 @@ dependencies = [
 ]
 
 [project.urls]
-Documentation = "https://github.com/iyjang1026/P1_pipeline#readme"
-Issues = "https://github.com/iyjang1026/P1_pipeline/issues"
-Source = "https://github.com/iyjang1026/P1_pipeline"
+Documentation = "https://github.com/iyjang1026/P1#readme"
+Issues = "https://github.com/iyjang1026/P1/issues"
+Source = "https://github.com/iyjang1026/P1"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

@@ -31,6 +31,15 @@ astropy, astroquery, photutils, scipy, scikit-image, ray(for multi-processing) e
 
 Initial folder setting
 ---
+
+Install P1 package
+---
+-install or git clone this repository
+-cd installed directory and type terminal this,
+```bash 
+pip install -e .
+```
+---
 Select location And make folder with name you want. The folder must have named folder that is "LIGHT, DARK, BIAS." The names are must be writen by Capital Alphabet.
 
 photometric catalog must be "sdss" and named "sdss_<target_name>.csv"
