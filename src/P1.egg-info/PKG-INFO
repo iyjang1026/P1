@@ -48,9 +48,6 @@ python pkg
 ---
 astropy, astroquery, photutils, scipy, scikit-image, ray(for multi-processing) etc.
 
-Initial folder setting
----
-
 Install P1 package
 ---
 1. install or git clone this repository
@@ -58,7 +55,8 @@ Install P1 package
 ```bash 
 pip install -e .
 ```
-then packages are install.
+
+Initial folder setting
 ---
 Select location And make folder with name you want. The folder must have named folder that is "LIGHT, DARK, BIAS." The names are must be writen by Capital Alphabet.
 
