@@ -1,14 +1,13 @@
 import sys, os
-sys.path.append(os.path.abspath('./src/pipeline'))
+#sys.path.append(os.path.abspath('./src/pipeline'))
 
-from utils import file_list, save_fits
+from pipeline.utils import file_list, save_fits, radec
 from astropy.io import fits
 from astropy.stats import sigma_clipped_stats
 import numpy as np
 
-from sky import poly_sky_model, rbf_sky_model
-from masking import region_mask, simple_masking
-from utils import radec 
+from pipeline.sky import poly_sky_model, rbf_sky_model
+from pipeline.masking import region_mask, simple_masking
 
 class Master:
     def __init__(self, path=str, ext_type=0):
