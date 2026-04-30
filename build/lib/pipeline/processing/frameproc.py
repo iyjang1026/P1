@@ -117,7 +117,7 @@ class Process:
         hdr.append(('sky_sub', 'Python', 'sky subtraction' ))
         return subed, hdr
         
-    def astrometry(self, radius=float):
+    def astrometry(self, index_loc=None|str, radius=float):
         ext_type = self.ext_type
         if ext_type == 0:
             ext = '.fits'
@@ -125,6 +125,10 @@ class Process:
             ext = '.fit'
         ra,dec = radec(self.obj)
         file = open(self.path+'/'+self.obj+'.sh', 'w')
-        file.write(f'solve-field --index-dir /Users/jang-in-yeong/solve/index4100 --use-source-extractor -3 {ra} -4 {dec} -5 {radius} --no-plots *'+ext+' \nrm -rf *.xyls *.axy *.corr *.match *.new *.rdls *.solved; ulimit -n 4096')
+        if type(index_loc) == str:
+            file.write(f'solve-field --index-dir {index_loc} --use-source-extractor -3 {ra} -4 {dec} -5 {radius} --no-plots {self.obj}*{ext}')
+        else:    
+            file.write(f'solve-field --use-source-extractor -3 {ra} -4 {dec} -5 {radius} --no-plots {self.obj}*{ext}')
+        
         file.close()
 
