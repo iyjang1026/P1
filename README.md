@@ -11,7 +11,7 @@ conda create -n astro python=3.12 --platform osx-64 # for mac
 
 conda create -n astro python=3.12 --platform linux-64 # for linux
 ```
-
+I recommand to insatll python 3.12 becuase of other functions which are added later. But, there is some error to use ipynb on VSCode. If you want to use this package on ipython or jupyter, please install python 3.13.
 conda-forge set
 ```bash
 conda config --add channels conda-forge
