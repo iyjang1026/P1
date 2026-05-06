@@ -81,9 +81,9 @@ class Process:
             db_subed = hdu.astype(np.float32) - bias - dark
             save_fits(self.path+'/db_subed','db_subed'+str(n),db_subed,hdr,ext_type=self.ext_type)
 
-    def mask(self,hdu=np.ndarray,i=int,pix=float,amp_r=bool|np.ndarray,amp_mask=True):
+    def mask(self,hdu=np.ndarray,i=int,threshold=float,pix=float,amp_r=bool|np.ndarray,amp_mask=True):
         #hdu = fits.getdata(hdul)
-        mask = region_mask(hdu, 0.99,pix,disk_r=amp_r,ampglow=amp_mask)
+        mask = region_mask(hdu, threshold,pix,disk_r=amp_r,ampglow=amp_mask)
         n = format(i,'04')
         save_fits(self.path+'/mask','mask_'+str(n),data=mask,ext_type=self.ext_type)
 
@@ -117,7 +117,7 @@ class Process:
         hdr.append(('sky_sub', 'Python', 'sky subtraction' ))
         return subed, hdr
         
-    def astrometry(self, index_loc=None|str, radius=float):
+    def astrometry(self, index_loc=None, radius=float):
         ext_type = self.ext_type
         if ext_type == 0:
             ext = '.fits'
@@ -125,10 +125,10 @@ class Process:
             ext = '.fit'
         ra,dec = radec(self.obj)
         file = open(self.path+'/'+self.obj+'.sh', 'w')
-        if type(index_loc) == str:
-            file.write(f'solve-field --index-dir {index_loc} --use-source-extractor -3 {ra} -4 {dec} -5 {radius} --no-plots {self.obj}*{ext}')
+        if index_loc != None:
+            file.write(f'solve-field --index-dir {index_loc} --use-source-extractor -3 {ra} -4 {dec} -5 {radius} --no-plots {self.obj}*{ext}\nrm -rf *.new *.xyls *.rdls *.corr *.axy *.solved *.match')
         else:    
-            file.write(f'solve-field --use-source-extractor -3 {ra} -4 {dec} -5 {radius} --no-plots {self.obj}*{ext}')
+            file.write(f'solve-field --use-source-extractor -3 {ra} -4 {dec} -5 {radius} --no-plots {self.obj}*{ext}\nrm -rf *.new *.xyls *.rdls *.corr *.axy *.solved *.match')
         
         file.close()
 

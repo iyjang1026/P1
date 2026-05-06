@@ -8,6 +8,9 @@ from skimage.morphology import disk
 from astropy.wcs import WCS
 from astropy.coordinates import SkyCoord
 
+import matplotlib.pyplot as plt
+import sys
+
 def simple_masking(arr):
     bkg_estimator = MedianBackground()
     bkg = Background2D(arr, (64,64), filter_size=(3,3), bkg_estimator=bkg_estimator)
@@ -42,9 +45,9 @@ def region_mask(hdu, thrsh,pix_scale,disk_r=100,ampglow=True):
     bkg = Background2D(hdu, (64,64), filter_size=(5,5), bkg_estimator=bkg_est, mask=z_arr)
     data = hdu - bkg.background
     threshold = thrsh*bkg.background_rms
-    kernel = make_2dgaussian_kernel(fwhm=3/pix_scale, size=5)
+    kernel = make_2dgaussian_kernel(fwhm=3/pix_scale, size=9)
     conv_hdu = convolve(data, kernel)
-    seg_map = detect_sources(conv_hdu, threshold, npixels=5, mask=z_arr)
+    seg_map = detect_sources(conv_hdu, threshold, npixels=9, mask=z_arr)
     segm_deblend = deblend_sources(conv_hdu, seg_map,
                                npixels=2000,connectivity=8, mode='exponential', nlevels=32, contrast=0.001,
                                progress_bar=False)
@@ -109,16 +112,21 @@ def region_mask(hdu, thrsh,pix_scale,disk_r=100,ampglow=True):
         arr_zero[arr_x:arr_x+m_x, arr_y:arr_y+m_y] += mask
     
     kernel0 = disk(3) 
-    seg_d= binary_dilation(seg, kernel0, iterations=1)
-    masked_map = np.where(seg_d!=0, 1, 0) + z_arr
+    seg_d= binary_dilation(seg, kernel0, iterations=1)+arr_zero
+    masked_map0 = np.where(seg_d!=0, 1, 0) + z_arr
+    
     if type(ampglow)!=np.ndarray:
         if ampglow == True:
-            masked_map[2048-disk_r:2048,1212-disk_r-1:1212+disk_r] += half[0:disk_r,:]
+            masked_map0[2048-disk_r:2048,1212-disk_r-1:1212+disk_r] += half[0:disk_r,:]
+            masked = np.where(masked_map0!=0, 1, 0).astype(np.int8)
+        elif ampglow == False:
+            masked_map = masked_map0
+            masked = np.where(masked_map!=0, 1, 0).astype(np.int8)
     elif type(half)==np.ndarray:
         if type(ampglow)==np.ndarray:
-            masked_map += z_arr
-    
-    masked = np.where(masked_map!=0, 1, 0).astype(np.int8)
+            masked_map0 += z_arr
+            masked = np.where(masked_map0!=0, 1, 0).astype(np.int8)
+
     return np.array(masked, dtype=np.int8)
 
 def obj_rej_mask(hdu, thrsh,hdr,ra,dec, bkg_thrsh=False):
