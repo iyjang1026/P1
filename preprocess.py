@@ -2,9 +2,9 @@ from pipeline.processing.frameproc import Master, Process
 from astropy.io import fits
 from pipeline.utils import file_list, mkdir, save_fits
 import ray
-import sys
+import sys, time
 
-path = '/volumes/USB128/2026-05-05/g'
+path = '/Users/jang-in-yeong/M51_r'
 obj = 'M51'
 ext_type = 0 #.fit is 1, .fits is 0. default is 0(.fits)
 
@@ -24,19 +24,23 @@ process.db_sub(bias=master.bias, dark=master.dark)
 mkdir(path, 'mask')
 hdul_list = file_list(process.path + '/db_subed', ext_type=process.ext_type)
 
+ray.init(num_cpus=4)
 @ray.remote
-def mask(hdul,i,pix,amp_r, amp_mask=False):
+def mask(i,pix,amp_r, amp_mask=False):
+    hdul = hdul_list[i]
     hdu = fits.getdata(hdul)
     process.mask(hdu,i,1.5,pix,amp_r,amp_mask=amp_mask)
+    time.sleep(0.1)
 
-amp_mask = False
+amp_mask = ray.put(False)
 band = 'L'
 if band == 'u':
     amp_mask=master.ampl_mask
 
-ray.shutdown()
-ray.init(num_cpus=6)
-ray.get([mask.remote(hdul_list[i],i,pix=1.86,amp_r=300,amp_mask=amp_mask) for i in range(len(hdul_list))])
+works = [mask.remote(i,0.84,300,amp_mask) for i in range(len(hdul_list))]
+while len(works):
+    dones, works = ray.wait(works)
+    ray.get(dones[0])
 ray.shutdown()
 
 #flat-fielding
@@ -57,8 +61,11 @@ def bkg_sub(pp_list, mask_list, i, order):
     save_fits(process.path+'/sky_subed',process.obj+'_'+str(n),data=data,hdr=hdr,ext_type=process.ext_type)
 
 ray.shutdown()
-ray.init(num_cpus=6)
-ray.get([bkg_sub.remote(pp_list,mask_list,i, order=2) for i in range(len(pp_list))])
+ray.init(num_cpus=4)
+work = [bkg_sub.remote(pp_list,mask_list,i, 2) for i in range(len(pp_list))]
+while len(work):
+    done, work = ray.wait(work)
+    ray.get(done[0])
 ray.shutdown()
 
 #astrometry.sh generate
