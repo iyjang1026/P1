@@ -3,11 +3,13 @@ sys.path.append(os.path.abspath('./src/pipeline'))
 import numpy as np
 from astropy.table import Table
 from astropy.coordinates import SkyCoord
+from astropy.wcs import WCS
 import matplotlib.pyplot as plt
 import astropy.io.fits as fits
 from astropy.stats import sigma_clipped_stats, sigma_clip
 from scipy.optimize import curve_fit
 from masking import region_mask
+from utils import radec
 from astropy.visualization import simple_norm
 
 import warnings
@@ -30,14 +32,20 @@ class Phot:
         self.sdss = Table.read(path + '/sdss_'+obj+'.csv', format='ascii') #check!! 
         
 
-    def bkg_std(self,hdu, size=5,offset=15):
+    def bkg_std(self,hdul,frame_size=2048, size=5,offset=15):
+        hdu = hdul.data
+        hdr = hdul.header
+        wcs = WCS(hdr)
+        ra, dec = radec(self.obj)
+        cen_coord = SkyCoord(ra, dec, frame='fk5', unit='deg')
+        x, y = wcs.world_to_pixel(cen_coord)
         std_list = []
         #median_list = []
-        hdu_x, hdu_y = hdu.shape
-        area = int(2048 - ((2*offset*60)/self.pix))
-        print(area)
+        area = int(frame_size - ((2*offset*60)/self.pix))
+        #print(area)
+        croped = hdu[int(y)-area//2:int(y)+area//2, int(x)-area//2:int(x)+area//2]
         mask = np.zeros_like(hdu)
-        mask[int(hdu_y/2)-area//2:int(hdu_y/2)+area//2, int(hdu_x/2)-area//2:int(hdu_x/2)+area//2] = region_mask(hdu[int(hdu_y/2)-area//2:int(hdu_y/2)+area//2, int(hdu_x/2)-area//2:int(hdu_x/2)+area//2], 1, self.pix, ampglow=False)
+        mask[int(y)-area//2:int(y)+area//2, int(x)-area//2:int(x)+area//2] += region_mask(croped, 1, self.pix, ampglow=False)
         arr = np.ma.masked_where(mask, np.ma.masked_equal(hdu, 0))
         x,y = arr.shape
         center_x, center_y = int(x/2), int(y/2)
@@ -139,9 +147,9 @@ class Phot:
             
             popt_line,pcov_line = curve_fit(line,t_r,stdz_mag(t_r, zp))
             fig,ax = plt.subplots(1,2)
-            counts, bins = np.histogram(mM, bins=32)
-            ax[0].bar(bins[:-1], counts, color='C1')
-            ax[0].set_xlabel('M-m')
+            counts, bins = np.histogram(mM[~np.isnan(mM)], bins=32)
+            ax[0].bar(bins[:-1], counts, color='C1', width=(np.max(bins)-np.min(bins))/32)
+            ax[0].set_xlabel('$M - m$')
             ax[0].set_ylabel('# of stars')
             ax[0].axvline(x=zp, linestyle='dashed', linewidth=2, c='grey')
 
@@ -160,12 +168,14 @@ class Phot:
 
         return zp
 
-def sb_limit_proc(path, obj,file_name,pix,color=str):
-    hdu = fits.open(path+'/sky_subed/'+file_name+'.fits')[0].data
+def sb_limit_proc(path, obj,file_name,pix,frame_size,size,offset,color=str):
+    hdul = fits.open(path+'/sky_subed/'+file_name+'.fits')[0]
     #mask = region_mask(hdu,0.8,pix,ampglow=False)
+    #plt.imshow(np.ma.masked_array(hdu, mask));plt.show();sys.exit()
     phot = Phot(path, obj,file_name,pix)
-    std_noise = phot.bkg_std(hdu,5,20)
+    std_noise = phot.bkg_std(hdul, frame_size,size,offset)
     zp = phot.phot_stdz(color, plot=True)
     
 
-sb_limit_proc('~/NGC5907','NGC5907','coadd',1.89,'r')
+#sb_limit_proc('/volumes/USB128/25-05-05','M51','coadd',0.84,3008,int(10/0.84),15,'r')
+
