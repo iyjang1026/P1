@@ -18,7 +18,7 @@ def simple_masking(arr):
     threshold = 1.5 * bkg.background_rms
     kernel = make_2dgaussian_kernel(3.0, size=5)
     convolved_data = convolve(data, kernel)
-    seg_map = detect_sources(convolved_data, threshold, npixels=30)
+    seg_map = detect_sources(convolved_data, threshold, n_pixels=30)
     mask_map = np.array(seg_map)
     kernel = disk(10)
     mask_map_d = binary_dilation(mask_map, kernel, iterations=3)
@@ -47,15 +47,15 @@ def region_mask(hdu, thrsh,pix_scale,disk_r=100,ampglow=True):
     threshold = thrsh*bkg.background_rms
     kernel = make_2dgaussian_kernel(fwhm=3/pix_scale, size=9)
     conv_hdu = convolve(data, kernel)
-    seg_map = detect_sources(conv_hdu, threshold, npixels=9, mask=z_arr)
+    seg_map = detect_sources(conv_hdu, threshold, n_pixels=9, mask=z_arr)
     segm_deblend = deblend_sources(conv_hdu, seg_map,
-                               npixels=2000,connectivity=8, mode='exponential', nlevels=32, contrast=0.001,
+                               n_pixels=2000,connectivity=8, mode='exponential', n_levels=32, contrast=0.001,
                                progress_bar=False)
     seg = np.array(seg_map)
     
     cat = SourceCatalog(data, segm_deblend, convolved_data=conv_hdu)
 
-    a_list = list(cat.semiminor_sigma.value)
+    a_list = list(cat.semiminor_axis.value)
     arr_zero = np.zeros_like(hdu).astype(np.float32) 
     tmp = a_list.copy()
     tmp.sort()
@@ -71,9 +71,9 @@ def region_mask(hdu, thrsh,pix_scale,disk_r=100,ampglow=True):
         xy = (int(xypos[0]), int(xypos[1]))
         """
         cat0 = cat[i]
-        xy = (cat0.xcentroid, cat0.ycentroid)
+        xy = (cat0.x_centroid, cat0.y_centroid)
         theta = cat0.orientation.value *np.pi /180
-        a,b = 3*cat0.semimajor_sigma.value, 3*cat0.semiminor_sigma.value
+        a,b = 3*cat0.semimajor_axis.value, 3*cat0.semiminor_axis.value
         #aperture = EllipticalAperture(xy, 3*a, 3*b, theta)
         aperture = EllipticalAperture(xy, 3.5*a, 3.5*b, theta=theta)
         mask = np.array(aperture.to_mask(method='center')).astype(np.int8)
@@ -137,23 +137,23 @@ def obj_rej_mask(hdu, thrsh,hdr,ra,dec, bkg_thrsh=False):
     threshold = thrsh*bkg.background_rms
     kernel = make_2dgaussian_kernel(fwhm=3.0, size=5)
     conv_hdu = convolve(data, kernel)
-    seg_map = detect_sources(conv_hdu, threshold, npixels=9, mask=mask1) #1차 천체 탐지
+    seg_map = detect_sources(conv_hdu, threshold, n_pixels=9, mask=mask1) #1차 천체 탐지
     segm_deblend = deblend_sources(conv_hdu, seg_map,
-                               npixels=2000, nlevels=32, contrast=0.0005,
+                               n_pixels=2000, n_levels=32, contrast=0.0005,
                                progress_bar=False) #천체분리
 
     segm_d = np.array(segm_deblend).astype(np.int32)
 
     cat = SourceCatalog(hdu,segm_deblend, convolved_data=conv_hdu)
 
-    a_list = list(cat.semiminor_sigma.value)
+    a_list = list(cat.semiminor_axis.value)
     
     tmp = a_list.copy()
     tmp.sort()
     tmp_num = tmp[-20:]
     top_idx = [a_list.index(x) for x in tmp_num]
     cat = cat[top_idx]
-    x,y = cat.xcentroid,cat.ycentroid
+    x,y = cat.x_centroid,cat.y_centroid
     w = WCS(hdr)
     eq_coord = SkyCoord(ra,dec,frame='fk5',unit='deg')
     pix_x,pix_y = w.world_to_pixel(eq_coord)
@@ -164,7 +164,7 @@ def obj_rej_mask(hdu, thrsh,hdr,ra,dec, bkg_thrsh=False):
     segm = SegmentationImage(segm_d)
     cat = SourceCatalog(segm, segm, convolved_data=conv_hdu)
      
-    a_list = list(cat.semiminor_sigma.value)
+    a_list = list(cat.semiminor_axis.value)
     
     tmp = a_list.copy()
     tmp.sort()
@@ -180,10 +180,10 @@ def obj_rej_mask(hdu, thrsh,hdr,ra,dec, bkg_thrsh=False):
         xy = (int(xypos[0]), int(xypos[1]))
         """
         cat0 = cat[i]
-        xy = (cat0.xcentroid, cat0.ycentroid)
+        xy = (cat0.x_centroid, cat0.y_centroid)
         theta = cat0.orientation.value *np.pi /180
-        a,b = 3*cat0.semimajor_sigma.value, 3*cat0.semiminor_sigma.value
-        aperture = EllipticalAperture(xy, 2.5*a, 2.5*b, theta)
+        a,b = 3*cat0.semimajor_axis.value, 3*cat0.semiminor_axis.value
+        aperture = EllipticalAperture(xy, 2.5*a, 2.5*b, theta=theta)
         mask = np.array(aperture.to_mask(method='center')).astype(np.int8)
         mask_x, mask_y = mask.shape
     
@@ -238,9 +238,9 @@ def psf_obj_rej_mask(hdu, thrsh,hdr,ra,dec):
     threshold = thrsh*bkg.background_rms
     kernel = make_2dgaussian_kernel(fwhm=3.0, size=5)
     conv_hdu = convolve(data, kernel)
-    seg_map = detect_sources(conv_hdu, threshold, npixels=9, mask=mask1) #1차 천체 탐지
+    seg_map = detect_sources(conv_hdu, threshold, n_pixels=9, mask=mask1) #1차 천체 탐지
     segm_deblend = deblend_sources(conv_hdu, seg_map,
-                               npixels=2000, nlevels=32, contrast=0.0005,
+                               n_pixels=2000, n_levels=32, contrast=0.0005,
                                progress_bar=False) #천체분리
 
     segm_d = np.array(segm_deblend).astype(np.int32)
@@ -272,10 +272,10 @@ def psf_obj_rej_mask(hdu, thrsh,hdr,ra,dec):
         xy = (int(xypos[0]), int(xypos[1]))
         """
         cat0 = cat[i][0]
-        xy = (cat0.xcentroid, cat0.ycentroid)
+        xy = (cat0.x_centroid, cat0.y_centroid)
         theta = cat0.orientation.value *np.pi /180
-        a,b = 3*cat0.semimajor_sigma.value, 3*cat0.semiminor_sigma.value
-        aperture = EllipticalAperture(xy, a, b, theta)
+        a,b = 3*cat0.semimajor_axis.value, 3*cat0.semiminor_axis.value
+        aperture = EllipticalAperture(xy, 2*a, 2*b, theta=theta)
         mask = np.array(aperture.to_mask(method='center')).astype(np.int8)
         mask_x, mask_y = mask.shape
     

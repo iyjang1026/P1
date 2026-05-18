@@ -4,9 +4,9 @@ from pipeline.utils import file_list, mkdir, save_fits
 import ray
 import sys, time
 
-path = '/Users/jang-in-yeong/M51_r'
-obj = 'M51'
-ext_type = 0 #.fit is 1, .fits is 0. default is 0(.fits)
+path = '/Users/jang-in-yeong/240508/2'
+obj = 'NGC5907'
+ext_type = 1#.fit is 1, .fits is 0. default is 0(.fits)
 
 master = Master(path,ext_type)
 process = Process(path, obj, ext_type)
@@ -26,18 +26,18 @@ hdul_list = file_list(process.path + '/db_subed', ext_type=process.ext_type)
 
 ray.init(num_cpus=4)
 @ray.remote
-def mask(i,pix,amp_r, amp_mask=False):
+def mask(i,pix,amp_r, amp_mask=True):
     hdul = hdul_list[i]
     hdu = fits.getdata(hdul)
-    process.mask(hdu,i,1.5,pix,amp_r,amp_mask=amp_mask)
+    process.mask(hdu,i,1.,pix,amp_r,amp_mask=amp_mask)
     time.sleep(0.1)
 
-amp_mask = ray.put(False)
+amp_mask = ray.put(True)
 band = 'L'
 if band == 'u':
     amp_mask=master.ampl_mask
 
-works = [mask.remote(i,0.84,300,amp_mask) for i in range(len(hdul_list))]
+works = [mask.remote(i,0.84,100,amp_mask) for i in range(len(hdul_list))]
 while len(works):
     dones, works = ray.wait(works)
     ray.get(dones[0])
@@ -58,7 +58,7 @@ mask_list = file_list(process.path + '/mask', process.ext_type)
 def bkg_sub(pp_list, mask_list, i, order):
     data, hdr = process.sky_sub(pp_list,mask_list,i, order)
     n = format(i, '04')
-    save_fits(process.path+'/sky_subed',process.obj+'_'+str(n),data=data,hdr=hdr,ext_type=process.ext_type)
+    save_fits(process.path+'/sky_subed',process.obj+'2_'+str(n),data=data,hdr=hdr,ext_type=process.ext_type)
 
 ray.shutdown()
 ray.init(num_cpus=4)

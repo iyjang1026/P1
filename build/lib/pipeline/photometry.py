@@ -1,5 +1,5 @@
 import sys, os
-sys.path.append(os.path.abspath('./src'))
+sys.path.append(os.path.abspath('./src/pipeline'))
 import numpy as np
 from astropy.table import Table
 from astropy.coordinates import SkyCoord
@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import astropy.io.fits as fits
 from astropy.stats import sigma_clipped_stats, sigma_clip
 from scipy.optimize import curve_fit
+from masking import region_mask
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -16,11 +17,12 @@ def stdz_mag(count,a,z_p):
         return mag
 
 class Phot:
-    def __init__(self, path, obj, pix):
+    def __init__(self, path, obj,file_name, pix):
         self.path = path
         self.obj = obj
+        self.file_name = file_name
         self.pix = pix
-        self.data = Table.read(path+'/sky_subed/coadd.cat', format='ascii', converters={'obsid':str})
+        self.data = Table.read(path+'/sky_subed/'+self.file_name+'.cat', format='ascii', converters={'obsid':str})
         self.sdss = Table.read(path + '/sdss_'+obj+'.csv', format='ascii') #check!! 
         
 
@@ -123,13 +125,12 @@ class Phot:
 
         return a, z0
 
-from pipeline.masking import region_mask
-def sb_limit_proc(path=str,obj=str,pix=float,color=str):
-    hdu = fits.open(path+'/sky_subed/coadd.fits')[0].data
+def sb_limit_proc(path, obj,file_name,pix,color=str):
+    hdu = fits.open(path+'/sky_subed/'+file_name+'.fits')[0].data
     mask = region_mask(hdu,1.,pix,ampglow=False)
-    phot = Phot(path, obj,pix)
+    phot = Phot(path, obj,file_name,pix)
     std_noise = phot.bkg_std(hdu,mask,128)
     a, zp = phot.phot_stdz(color, plot=True)
     
-
-#sb_limit_proc('/volumes/ssd/test', 'M101',1.89,'r')
+#phot = Phot('~/M51_r', 'M51','bilinear_clipped',0.84)
+#sb_limit_proc('~/M51_r', 'M51','bilinear',0.84,'r')
