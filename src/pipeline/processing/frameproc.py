@@ -1,6 +1,4 @@
-import sys, os
-sys.path.append(os.path.abspath('./src/pipeline'))
-
+import sys, os, site
 from utils import file_list, save_fits, radec
 from astropy.io import fits
 from astropy.stats import sigma_clipped_stats
