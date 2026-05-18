@@ -32,13 +32,15 @@ class Phot:
         self.sdss = Table.read(path + '/sdss_'+obj+'.csv', format='ascii') #check!! 
         
 
-    def bkg_std(self,hdul,frame_size=2048, size=5,offset=15):
+    def bkg_std(self,hdul,frame_size=2048, size=5,offset=15, plot=False):
         hdu = hdul.data
         hdr = hdul.header
         wcs = WCS(hdr)
         ra, dec = radec(self.obj)
         cen_coord = SkyCoord(ra, dec, frame='fk5', unit='deg')
+        x0,y0 = hdu.shape
         x, y = wcs.world_to_pixel(cen_coord)
+        #x,y = int(x0/2),int(y0/2)
         std_list = []
         #median_list = []
         area = int(frame_size - ((2*offset*60)/self.pix))
@@ -46,40 +48,46 @@ class Phot:
         croped = hdu[int(y)-area//2:int(y)+area//2, int(x)-area//2:int(x)+area//2]
         mask = np.zeros_like(hdu)
         mask[int(y)-area//2:int(y)+area//2, int(x)-area//2:int(x)+area//2] += region_mask(croped, 1, self.pix, ampglow=False)
-        arr = np.ma.masked_where(mask, np.ma.masked_equal(hdu, 0))
-        x,y = arr.shape
-        center_x, center_y = int(x/2), int(y/2)
+        arr = np.where(mask!=0, np.nan, hdu)#np.ma.masked_where(mask, np.ma.masked_equal(hdu, 0))
         ran_x, ran_y = [], []
-        for i in range(1000):
-            rand_st_x = np.random.randint(center_x-area//2, center_x+area//2-size)
-            rand_st_y = np.random.randint(center_y-area//2, center_y+area//2-size)
-            ran_x.append(rand_st_x)
-            ran_y.append(rand_st_y)
-            bin_arr = arr[rand_st_x:rand_st_x+size, rand_st_y:rand_st_y+size]
-            std1 = np.ma.std(bin_arr)
-            #mean, median1, std1 = sigma_clipped_stats(bin_arr, cenfunc='median', stdfunc='mad_std', sigma=3)
-            #median_list.append(median1)
-            std_list.append(std1)
+        #for i in range(1000):
+        while len(std_list)<2000:
+            rand_st_x = np.random.randint(x-area//2, x+area//2-size)
+            rand_st_y = np.random.randint(y-area//2, y+area//2-size)
+            bin_arr = arr[rand_st_y:rand_st_y+size, rand_st_x:rand_st_x+size]
+            if len(bin_arr[np.isnan(bin_arr)]) <1:
+                std1 = np.nanstd(bin_arr)
+                #mean, median1, std1 = sigma_clipped_stats(bin_arr, cenfunc='median', stdfunc='mad_std', sigma=3)
+                #median_list.append(median1)
+                
+                std_list.append(std1)
+                ran_x.append(rand_st_x)
+                ran_y.append(rand_st_y)
+                #print(len(std_list), std1)  
         """
         mean, std_median, std = sigma_clipped_stats(np.array(std_list).astype(np.float32),
                                                 cenfunc='median', stdfunc='mad_std', sigma=3.)
         """
-        std_median = np.nanmedian(std_list)
+        std_array = np.array(std_list)
+        print(std_array)
+        std_median = np.nanmedian(std_array)
         print(f'sigma={std_median}')
         self.bkg_noise = std_median
-        """
-        print(np.max(ran_x) - np.min(ran_x), np.max(ran_y)-np.min(ran_y))
-        hist_arr = arr[int(hdu_y/2)-area//2:int(hdu_y/2)+area//2, int(hdu_x/2)-area//2:int(hdu_x/2)+area//2]
-        hist_data = np.where(hist_arr.mask==True, np.nan, hist_arr.data)
-        counts, bins = np.histogram(hist_data, bins=64, range=(-500,500))
-        fig, ax = plt.subplots(1,3)
-        ax[0].scatter(ran_x, ran_y, s=3)
-        ax[0].set_xlabel('sampling_x')
-        ax[0].set_ylabel('sampling_y')
-        ax[1].imshow(arr, norm=norm(arr[int(hdu_y/2)-area//2:int(hdu_y/2)+area//2, int(hdu_x/2)-area//2:int(hdu_x/2)+area//2]), origin='lower')
-        ax[2].bar(bins[:-1], counts, width=500/64)
-        plt.show();sys.exit()
-        """
+        if plot == True:
+            print(np.max(ran_x) - np.min(ran_x), np.max(ran_y)-np.min(ran_y))
+            hist_arr = arr[int(y)-area//2:int(y)+area//2, int(x)-area//2:int(x)+area//2]
+            #hist_data = np.where(hist_arr.mask==True, np.nan, hist_arr.data)
+            counts, bins = np.histogram(hist_arr, bins=64, range=(-500,500))
+            width = (np.max(bins)-np.min(bins))/64
+            fig, ax = plt.subplots(1,2)
+            ax[0].scatter(ran_x, ran_y, s=3, c='tomato')
+            ax[0].imshow(arr, norm=norm(hist_arr), origin='lower')
+            ax[1].bar(bins[:-1], counts, width=width, color='C0')
+            ax[1].axvline(x=np.nanmedian(hist_arr), linestyle='dashed', c='C1')
+            ax[1].axvline(x=np.nanmedian(hist_arr)+std_median, linestyle='dotted', c='C1')
+            ax[1].axvline(x=np.nanmedian(hist_arr)-std_median, linestyle='dotted', c='C1')
+            plt.show()
+        
         return std_median
 
     def phot_stdz(self,color, plot=False):
@@ -148,7 +156,8 @@ class Phot:
             popt_line,pcov_line = curve_fit(line,t_r,stdz_mag(t_r, zp))
             fig,ax = plt.subplots(1,2)
             counts, bins = np.histogram(mM[~np.isnan(mM)], bins=32)
-            ax[0].bar(bins[:-1], counts, color='C1', width=(np.max(bins)-np.min(bins))/32)
+            width=(np.max(bins)-np.min(bins))/32
+            ax[0].bar(bins[:-1], counts, color='C1', width=width)
             ax[0].set_xlabel('$M - m$')
             ax[0].set_ylabel('# of stars')
             ax[0].axvline(x=zp, linestyle='dashed', linewidth=2, c='grey')
@@ -173,9 +182,9 @@ def sb_limit_proc(path, obj,file_name,pix,frame_size,size,offset,color=str):
     #mask = region_mask(hdu,0.8,pix,ampglow=False)
     #plt.imshow(np.ma.masked_array(hdu, mask));plt.show();sys.exit()
     phot = Phot(path, obj,file_name,pix)
-    std_noise = phot.bkg_std(hdul, frame_size,size,offset)
+    std_noise = phot.bkg_std(hdul, frame_size,size,offset, plot=True)
     zp = phot.phot_stdz(color, plot=True)
     
 
-#sb_limit_proc('/volumes/USB128/25-05-05','M51','coadd',0.84,3008,int(10/0.84),15,'r')
+#sb_limit_proc('~/NGC5907', 'NGC5907', 'coadd', 1.89, 2048, 5,10,'r') # ('~/M51', 'M51', 'coadd', 0.84, 3008, int(10/0.84), 15, 'r') #
 

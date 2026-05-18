@@ -19,29 +19,28 @@ def poly_sky_model(data, bin, order=2):
     """
     the center position of binned pixel
     """
-    xx_m = np.arange(0,img_width, img_width/bin) + new_width//2
-    yy_m = np.arange(0, img_height, img_height/bin) + new_height//2
 
-    x_m = np.array([[i for i in xx_m] for j in yy_m])
-    y_m = np.array([[j for i in xx_m] for j in yy_m])
+    h_width = img_height//bin
+    w_width = img_width//bin
+    x0 = np.arange(0,img_width,w_width)
+    y0 = np.arange(0,img_height,h_width)
+    x,y = np.meshgrid(x0+w_width//2,y0+h_width//2, indexing='ij')   
 
     """
     binning
     """
     for j in range(bin):
         for i in range(bin):
-            y = j*new_height
-            x = i*new_width
-            pixel = data[y:y+new_height, x:x+new_width]
+            y1 = j*new_height
+            x1 = i*new_width
+            pixel = data[y1:y1+new_height, x1:x1+new_width]
             mean, median,std = sigma_clipped_stats(pixel, cenfunc='median',stdfunc='mad_std',sigma=3)
             newImage[j,i] = median
             
     """
     calculate matrix x and y, these are positon component or img
     """        
-    x1 = np.array([[i for i in range(img_width)] for j in range(img_height)])
-    y1 = np.array([[j for i in range(img_width)] for j in range(img_height)])
-
+  
     data_nc = np.ma.masked_invalid(newImage)
 
     """
@@ -52,8 +51,9 @@ def poly_sky_model(data, bin, order=2):
     fit_p = fitting.LinearLSQFitter()
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        model = fit_p(p_init, x_m, y_m, data_nc) #하늘의 모델을 반환(x,y)
-    return model(x1, y1)
+        model = fit_p(p_init, x, y, data_nc) #하늘의 모델을 반환(x,y)
+    x_model,y_model = np.meshgrid(np.arange(img_width),np.arange(img_height), indexing='ij')
+    return model(x_model, y_model)
 
 def rbf_sky_model(data, bin):
     img_height, img_width = data.shape
@@ -90,6 +90,7 @@ def rbf_sky_model(data, bin):
     data_nc = np.ma.masked_array(newImage,mask).astype(np.float16)
     x = np.ma.masked_array(x_grid, mask)
     y = np.ma.masked_array(y_grid, mask)
+
     """
     modeling
     """

@@ -4,18 +4,18 @@ from pipeline.utils import file_list, mkdir, save_fits
 import ray
 import sys, time
 
-path = '/Users/jang-in-yeong/240508/2'
+path = '/Users/jang-in-yeong/NGC5907'
 obj = 'NGC5907'
 ext_type = 1#.fit is 1, .fits is 0. default is 0(.fits)
 
 master = Master(path,ext_type)
 process = Process(path, obj, ext_type)
-
+"""
 #bias, dark subtraction and amplifier glow masking
 mkdir(path, 'process')
 master.master_bias()
 master.master_dark()
-#master.amp_mask()
+master.amp_mask(threshold=6.)
 
 mkdir(path,'db_subed')
 process.db_sub(bias=master.bias, dark=master.dark)
@@ -29,10 +29,10 @@ ray.init(num_cpus=4)
 def mask(i,pix,amp_r, amp_mask=True):
     hdul = hdul_list[i]
     hdu = fits.getdata(hdul)
-    process.mask(hdu,i,1.,pix,amp_r,amp_mask=amp_mask)
+    process.mask(hdu,i,0.8,pix,amp_r,amp_mask=amp_mask)
     time.sleep(0.1)
 
-amp_mask = ray.put(True)
+amp_mask = ray.put(master.ampl_mask)
 band = 'L'
 if band == 'u':
     amp_mask=master.ampl_mask
@@ -49,7 +49,7 @@ mkdir(path,'pp')
 db_list = file_list(process.path+'/db_subed', ext_type=process.ext_type)
 
 process.proc(db_list, master.flat)
-
+"""
 #sky subtraction
 mkdir(path, 'sky_subed')
 pp_list = file_list(process.path+'/pp', process.ext_type)
@@ -58,7 +58,7 @@ mask_list = file_list(process.path + '/mask', process.ext_type)
 def bkg_sub(pp_list, mask_list, i, order):
     data, hdr = process.sky_sub(pp_list,mask_list,i, order)
     n = format(i, '04')
-    save_fits(process.path+'/sky_subed',process.obj+'2_'+str(n),data=data,hdr=hdr,ext_type=process.ext_type)
+    save_fits(process.path+'/sky_subed',process.obj+'_'+str(n),data=data,hdr=hdr,ext_type=process.ext_type)
 
 ray.shutdown()
 ray.init(num_cpus=4)

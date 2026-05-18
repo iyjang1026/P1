@@ -7,21 +7,20 @@ from scipy.ndimage import binary_dilation
 from skimage.morphology import disk
 from astropy.wcs import WCS
 from astropy.coordinates import SkyCoord
-
 import matplotlib.pyplot as plt
 import sys
 
-def simple_masking(arr):
+def simple_masking(arr, detect_threshold=1.5, n_pixels=300):
     bkg_estimator = MedianBackground()
     bkg = Background2D(arr, (64,64), filter_size=(3,3), bkg_estimator=bkg_estimator)
     data = arr - bkg.background
-    threshold = 1.5 * bkg.background_rms
+    threshold = detect_threshold * bkg.background_rms_median
     kernel = make_2dgaussian_kernel(3.0, size=5)
     convolved_data = convolve(data, kernel)
-    seg_map = detect_sources(convolved_data, threshold, n_pixels=30)
+    seg_map = detect_sources(convolved_data, threshold, n_pixels=n_pixels)
     mask_map = np.array(seg_map)
-    kernel = disk(10)
-    mask_map_d = binary_dilation(mask_map, kernel, iterations=3)
+    kernel = disk(3)
+    mask_map_d = binary_dilation(mask_map, kernel, iterations=1)
     masked = np.where((mask_map_d!=0), 1, 0)
     return masked.astype(np.int8)
 
@@ -75,7 +74,7 @@ def region_mask(hdu, thrsh,pix_scale,disk_r=100,ampglow=True):
         theta = cat0.orientation.value *np.pi /180
         a,b = 3*cat0.semimajor_axis.value, 3*cat0.semiminor_axis.value
         #aperture = EllipticalAperture(xy, 3*a, 3*b, theta)
-        aperture = EllipticalAperture(xy, 3.5*a, 3.5*b, theta=theta)
+        aperture = EllipticalAperture(xy, 2*a, 2*b, theta=theta)
         mask = np.array(aperture.to_mask(method='center')).astype(np.int8)
         mask_x, mask_y = mask.shape
     

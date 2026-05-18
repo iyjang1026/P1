@@ -35,8 +35,8 @@ class Master:
         self.dark = master_d
         #return master_d
     
-    def amp_mask(self):
-        mask = simple_masking(self.dark)
+    def amp_mask(self, threshold):
+        mask = simple_masking(self.dark, detect_threshold=threshold)
         self.ampl_mask = mask
 
     def master_flat(self):
@@ -126,7 +126,7 @@ class Process:
         if index_loc != None:
             file.write(f'solve-field --index-dir {index_loc} --use-source-extractor -3 {ra} -4 {dec} -5 {radius} --no-plots {self.obj}*{ext}\nrm -rf *.new *.xyls *.rdls *.corr *.axy *.solved *.match')
         else:    
-            file.write(f'solve-field --use-source-extractor -3 {ra} -4 {dec} -5 {radius} --no-plots {self.obj}*{ext}\nrm -rf *.new *.xyls *.rdls *.corr *.axy *.solved *.match')
+            file.write(f'solve-field --use-source-extractor -3 {ra} -4 {dec} -5 {radius} --no-plots {self.obj}*{ext}\nrm -rf *.xyls *.rdls *.corr *.axy *.solved *.match')
         
         file.close()
 
