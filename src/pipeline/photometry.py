@@ -32,19 +32,17 @@ class Phot:
         self.sdss = Table.read(path + '/sdss_'+obj+'.csv', format='ascii') #check!! 
         
 
-    def bkg_std(self,hdul,frame_size=2048, size=5,offset=15, plot=False):
+    def bkg_std(self,hdul,frame_size=2048, offset=15, plot=False):
         hdu = hdul.data
         hdr = hdul.header
         wcs = WCS(hdr)
         ra, dec = radec(self.obj)
         cen_coord = SkyCoord(ra, dec, frame='fk5', unit='deg')
-        x0,y0 = hdu.shape
         x, y = wcs.world_to_pixel(cen_coord)
-        #x,y = int(x0/2),int(y0/2)
         std_list = []
-        #median_list = []
+        size = int(10/self.pix)
         area = int(frame_size - ((2*offset*60)/self.pix))
-        #print(area)
+        
         croped = hdu[int(y)-area//2:int(y)+area//2, int(x)-area//2:int(x)+area//2]
         mask = np.zeros_like(hdu)
         mask[int(y)-area//2:int(y)+area//2, int(x)-area//2:int(x)+area//2] += region_mask(croped, 1, self.pix, ampglow=False)
@@ -177,14 +175,14 @@ class Phot:
 
         return zp
 
-def sb_limit_proc(path, obj,file_name,pix,frame_size,size,offset,color=str):
+def sb_limit_proc(path, obj,file_name,pix,frame_size,offset,color=str):
     hdul = fits.open(path+'/sky_subed/'+file_name+'.fits')[0]
     #mask = region_mask(hdu,0.8,pix,ampglow=False)
     #plt.imshow(np.ma.masked_array(hdu, mask));plt.show();sys.exit()
     phot = Phot(path, obj,file_name,pix)
-    std_noise = phot.bkg_std(hdul, frame_size,size,offset, plot=True)
+    std_noise = phot.bkg_std(hdul, frame_size,offset, plot=True)
     zp = phot.phot_stdz(color, plot=True)
     
 
-#sb_limit_proc('~/NGC5907', 'NGC5907', 'coadd', 1.89, 2048, 5,10,'r') # ('~/M51', 'M51', 'coadd', 0.84, 3008, int(10/0.84), 15, 'r') #
+sb_limit_proc('~/NGC5907', 'NGC5907', 'coadd', 1.89, 2048 ,20,'r') # ('~/M51', 'M51', 'coadd', 0.84, 3008, int(10/0.84), 15, 'r') #
 
