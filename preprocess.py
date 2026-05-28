@@ -4,13 +4,13 @@ from pipeline.utils import file_list, mkdir, save_fits
 import ray
 import sys, time
 
-path = '/Users/jang-in-yeong/NGC5907'
+path = '/Users/jang-in-yeong/240508/2'
 obj = 'NGC5907'
 ext_type = 1#.fit is 1, .fits is 0. default is 0(.fits)
 
 master = Master(path,ext_type)
 process = Process(path, obj, ext_type)
-"""
+
 #bias, dark subtraction and amplifier glow masking
 mkdir(path, 'process')
 master.master_bias()
@@ -49,7 +49,7 @@ mkdir(path,'pp')
 db_list = file_list(process.path+'/db_subed', ext_type=process.ext_type)
 
 process.proc(db_list, master.flat)
-"""
+
 #sky subtraction
 mkdir(path, 'sky_subed')
 pp_list = file_list(process.path+'/pp', process.ext_type)
@@ -58,7 +58,7 @@ mask_list = file_list(process.path + '/mask', process.ext_type)
 def bkg_sub(pp_list, mask_list, i, order):
     data, hdr = process.sky_sub(pp_list,mask_list,i, order)
     n = format(i, '04')
-    save_fits(process.path+'/sky_subed',process.obj+'_'+str(n),data=data,hdr=hdr,ext_type=process.ext_type)
+    save_fits(process.path+'/sky_subed',process.obj+'_2_'+str(n),data=data,hdr=hdr,ext_type=process.ext_type)
 
 ray.shutdown()
 ray.init(num_cpus=4)

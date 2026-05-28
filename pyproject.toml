@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "P1"
-version = "0.1.5"
+version = "0.2.0"
 license = "MIT"
 description = "K-DRIFT P1 data processing pipeline"
 readme = "README.md"

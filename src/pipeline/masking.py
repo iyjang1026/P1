@@ -128,7 +128,7 @@ def region_mask(hdu, thrsh,pix_scale,disk_r=100,ampglow=True):
 
     return np.array(masked, dtype=np.int8)
 
-def obj_rej_mask(hdu, thrsh,hdr,ra,dec, bkg_thrsh=False):
+def obj_rej_mask(hdu, thrsh,hdr,ra,dec,npix=9,kernel_size=3,ngrow=1, bkg_thrsh=False):
     mask1 = np.where(hdu!=0, 0, 1)
     bkg_est = MedianBackground()
     bkg = Background2D(hdu, (64,64), filter_size=(3,3), bkg_estimator=bkg_est, mask=mask1)
@@ -136,12 +136,10 @@ def obj_rej_mask(hdu, thrsh,hdr,ra,dec, bkg_thrsh=False):
     threshold = thrsh*bkg.background_rms
     kernel = make_2dgaussian_kernel(fwhm=3.0, size=5)
     conv_hdu = convolve(data, kernel)
-    seg_map = detect_sources(conv_hdu, threshold, n_pixels=9, mask=mask1) #1차 천체 탐지
+    seg_map = detect_sources(conv_hdu, threshold, n_pixels=npix, mask=mask1) #1차 천체 탐지
     segm_deblend = deblend_sources(conv_hdu, seg_map,
                                n_pixels=2000, n_levels=32, contrast=0.0005,
                                progress_bar=False) #천체분리
-
-    segm_d = np.array(segm_deblend).astype(np.int32)
 
     cat = SourceCatalog(hdu,segm_deblend, convolved_data=conv_hdu)
 
@@ -158,8 +156,11 @@ def obj_rej_mask(hdu, thrsh,hdr,ra,dec, bkg_thrsh=False):
     pix_x,pix_y = w.world_to_pixel(eq_coord)
     idx = np.where((np.min(abs(pix_x-x))==abs(pix_x-x))&(np.min(abs(pix_y-y)==abs(pix_y-y))))
     cat1 = cat[idx]
- 
-    segm_d[cat1.bbox_ymin[0]:cat1.bbox_ymax[0],cat1.bbox_xmin[0]:cat1.bbox_xmax[0]] = 0
+    segm_deblend.remove_label(cat1.label)
+    #plt.imshow(np.array(segm_deblend), origin='lower');plt.show();sys.exit()
+    #segm_d[cat1.bbox_ymin[0]:cat1.bbox_ymax[0],cat1.bbox_xmin[0]:cat1.bbox_xmax[0]] = 0
+    
+    segm_d = np.array(segm_deblend).astype(np.int32)
     segm = SegmentationImage(segm_d)
     cat = SourceCatalog(segm, segm, convolved_data=conv_hdu)
      
@@ -167,7 +168,7 @@ def obj_rej_mask(hdu, thrsh,hdr,ra,dec, bkg_thrsh=False):
     
     tmp = a_list.copy()
     tmp.sort()
-    tmp_num = tmp[-3:]
+    tmp_num = tmp[-10:]
     top_idx = [a_list.index(x) for x in tmp_num]
     for i in top_idx:
         """
@@ -217,8 +218,8 @@ def obj_rej_mask(hdu, thrsh,hdr,ra,dec, bkg_thrsh=False):
         mask = mask[mask_s_x:mask_l_x,mask_s_y:mask_l_y] 
         m_x, m_y = mask.shape #crop mask
         mask1[arr_x:arr_x+m_x, arr_y:arr_y+m_y] += mask
-    kernel0 = disk(3) 
-    segm_d = binary_dilation(segm_d, kernel0, iterations=1) #ngrow
+    kernel0 = disk(1) 
+    segm_d = binary_dilation(segm_d, kernel0, iterations=ngrow) #ngrow
     masked_map = np.where(segm_d!=0, 1, 0) + mask1 #region 마스크 영상과 segmentation 마스크 영상을 합침
     masked = np.where(masked_map!=0, 1, 0).astype(np.int8)
     if bkg_thrsh == True:
