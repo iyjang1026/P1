@@ -128,26 +128,30 @@ def region_mask(hdu, thrsh,pix_scale,disk_r=100,ampglow=True):
 
     return np.array(masked, dtype=np.int8)
 
-def obj_rej_mask(hdu, thrsh,hdr,ra,dec,npix=9,kernel_size=3,ngrow=1, bkg_thrsh=False):
-    mask1 = np.where(hdu!=0, 0, 1)
+def obj_rej_mask(hdu, thrsh,hdr,ra,dec,npix=5,kernel_size=3,ngrow=1, mask=None,ellipse_mask=True,bkg_thrsh=False):
+    if type(mask)!=np.ndarray:
+        mask1 = np.where((hdu==0)|(hdu>=hdr['SATURATE']*0.95), 1,0) #np.where(hdu==0, 1, 0)#
+    else:
+        mask1 = np.where((mask==1)|(hdu>=hdr['SATURATE']*0.95),1,0)#mask#
+        
     bkg_est = MedianBackground()
-    bkg = Background2D(hdu, (64,64), filter_size=(3,3), bkg_estimator=bkg_est, mask=mask1)
+    bkg = Background2D(hdu, (64,64), filter_size=(5,5), bkg_estimator=bkg_est, mask=mask1)
     data = hdu - bkg.background
     threshold = thrsh*bkg.background_rms
-    kernel = make_2dgaussian_kernel(fwhm=3.0, size=5)
+    kernel = np.array([[0,1,0],[1,1,1],[0,1,0]])#make_2dgaussian_kernel(fwhm=3.0/1.89, size=5)
     conv_hdu = convolve(data, kernel)
-    seg_map = detect_sources(conv_hdu, threshold, n_pixels=npix, mask=mask1) #1차 천체 탐지
+    seg_map = detect_sources(conv_hdu, threshold, n_pixels=npix,connectivity=4, mask=mask1) #1차 천체 탐지
     segm_deblend = deblend_sources(conv_hdu, seg_map,
-                               n_pixels=2000, n_levels=32, contrast=0.0005,
+                               n_pixels=2000, n_levels=32, contrast=0.0,connectivity=4,mode='linear',
                                progress_bar=False) #천체분리
-
-    cat = SourceCatalog(hdu,segm_deblend, convolved_data=conv_hdu)
+        
+    cat = SourceCatalog(data,segm_deblend, convolved_data=conv_hdu)
 
     a_list = list(cat.semiminor_axis.value)
     
     tmp = a_list.copy()
     tmp.sort()
-    tmp_num = tmp[-20:]
+    tmp_num = tmp[-10:]
     top_idx = [a_list.index(x) for x in tmp_num]
     cat = cat[top_idx]
     x,y = cat.x_centroid,cat.y_centroid
@@ -157,74 +161,66 @@ def obj_rej_mask(hdu, thrsh,hdr,ra,dec,npix=9,kernel_size=3,ngrow=1, bkg_thrsh=F
     idx = np.where((np.min(abs(pix_x-x))==abs(pix_x-x))&(np.min(abs(pix_y-y)==abs(pix_y-y))))
     cat1 = cat[idx]
     segm_deblend.remove_label(cat1.label)
-    #plt.imshow(np.array(segm_deblend), origin='lower');plt.show();sys.exit()
-    #segm_d[cat1.bbox_ymin[0]:cat1.bbox_ymax[0],cat1.bbox_xmin[0]:cat1.bbox_xmax[0]] = 0
     
     segm_d = np.array(segm_deblend).astype(np.int32)
-    segm = SegmentationImage(segm_d)
-    cat = SourceCatalog(segm, segm, convolved_data=conv_hdu)
-     
-    a_list = list(cat.semiminor_axis.value)
-    
-    tmp = a_list.copy()
-    tmp.sort()
-    tmp_num = tmp[-10:]
-    top_idx = [a_list.index(x) for x in tmp_num]
-    for i in top_idx:
-        """
-        g_aper = l[i]
-        a = g_aper.a
-        b = g_aper.b
-        xypos = g_aper.positions
-        theta = g_aper.theta
-        xy = (int(xypos[0]), int(xypos[1]))
-        """
-        cat0 = cat[i]
-        xy = (cat0.x_centroid, cat0.y_centroid)
-        theta = cat0.orientation.value *np.pi /180
-        a,b = 3*cat0.semimajor_axis.value, 3*cat0.semiminor_axis.value
-        aperture = EllipticalAperture(xy, 2.5*a, 2.5*b, theta=theta)
-        mask = np.array(aperture.to_mask(method='center')).astype(np.int8)
-        mask_x, mask_y = mask.shape
-    
-        st_x = np.int16(xy[1] - mask_x/2)
-        st_y = np.int16(xy[0] - mask_y/2)
-    
-        x, y = hdu.shape
-   
-        def lim(st, mask_s, arr_s):
-            if st < 0 and st+mask_s<arr_s:
-                arr_st = 0
-                mask_st = -st
-                mask_l = mask_s
-            elif st<0 and st+mask_s>arr_s:
-                arr_st = 0
-                mask_st = -st
-                mask_l = mask_s + st - arr_s
+    if ellipse_mask == True:
+        segm = SegmentationImage(segm_d)
+        cat = SourceCatalog(data, segm, convolved_data=conv_hdu)
         
-            elif st+mask_s > arr_s:
-                arr_st = st
-                mask_st = 0
-                mask_l = arr_s - st
+        a_list = list(cat.semiminor_axis.value)
+        
+        tmp = a_list.copy()
+        tmp.sort()
+        tmp_num = tmp[-10:]
+        top_idx = [a_list.index(x) for x in tmp_num]
+        for i in top_idx:
+            cat0 = cat[i]
+            xy = (cat0.x_centroid, cat0.y_centroid)
+            theta = cat0.orientation.value *np.pi /180
+            a,b = 3*cat0.semimajor_axis.value, 3*cat0.semiminor_axis.value
+            aperture = EllipticalAperture(xy, 2.5*a, 2.5*b, theta=theta)
+            mask = np.array(aperture.to_mask(method='center')).astype(np.int8)
+            mask_x, mask_y = mask.shape
+        
+            st_x = np.int16(xy[1] - mask_x/2)
+            st_y = np.int16(xy[0] - mask_y/2)
+        
+            x, y = hdu.shape
+    
+            def lim(st, mask_s, arr_s):
+                if st < 0 and st+mask_s<arr_s:
+                    arr_st = 0
+                    mask_st = -st
+                    mask_l = mask_s
+                elif st<0 and st+mask_s>arr_s:
+                    arr_st = 0
+                    mask_st = -st
+                    mask_l = mask_s + st - arr_s
+            
+                elif st+mask_s > arr_s:
+                    arr_st = st
+                    mask_st = 0
+                    mask_l = arr_s - st
 
-            else:
-                arr_st = st
-                mask_st = 0
-                mask_l = mask_s
-            return arr_st, mask_st, mask_l
+                else:
+                    arr_st = st
+                    mask_st = 0
+                    mask_l = mask_s
+                return arr_st, mask_st, mask_l
+            
+            arr_x, mask_s_x, mask_l_x = lim(st_x, mask_x, x)
+            arr_y, mask_s_y, mask_l_y = lim(st_y, mask_y, y)
+            mask = mask[mask_s_x:mask_l_x,mask_s_y:mask_l_y] 
+            m_x, m_y = mask.shape #crop mask
+            mask1[arr_x:arr_x+m_x, arr_y:arr_y+m_y] += mask
         
-        arr_x, mask_s_x, mask_l_x = lim(st_x, mask_x, x)
-        arr_y, mask_s_y, mask_l_y = lim(st_y, mask_y, y)
-        mask = mask[mask_s_x:mask_l_x,mask_s_y:mask_l_y] 
-        m_x, m_y = mask.shape #crop mask
-        mask1[arr_x:arr_x+m_x, arr_y:arr_y+m_y] += mask
-    kernel0 = disk(1) 
-    segm_d = binary_dilation(segm_d, kernel0, iterations=ngrow) #ngrow
+    kernel0 = disk(kernel_size) 
     masked_map = np.where(segm_d!=0, 1, 0) + mask1 #region 마스크 영상과 segmentation 마스크 영상을 합침
-    masked = np.where(masked_map!=0, 1, 0).astype(np.int8)
+    masked_grow = binary_dilation(masked_map, kernel0, iterations=ngrow) #ngrow
+    masked = np.where(masked_grow!=0, 1, 0).astype(np.int8)
     if bkg_thrsh == True:
         pos = (cat1[0].x_centroid, cat1[0].y_centroid)
-        aper = EllipticalAperture(pos, a=6*cat1[0].semimajor_axis.value, b=6*cat1[0].semiminor_axis.value,
+        aper = EllipticalAperture(pos, a=3*cat1[0].semimajor_axis.value, b=3*cat1[0].semiminor_axis.value,
                                   theta=cat1[0].orientation.value*np.pi/180)
         return np.array(masked, dtype=np.int8), threshold, aper
     else:

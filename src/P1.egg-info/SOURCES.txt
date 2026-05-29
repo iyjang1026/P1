@@ -7,7 +7,7 @@ src/P1.egg-info/dependency_links.txt
 src/P1.egg-info/requires.txt
 src/P1.egg-info/top_level.txt
 src/pipeline/__init__.py
-src/pipeline/analysis.py
+src/pipeline/ellipse.py
 src/pipeline/masking.py
 src/pipeline/phot_calib.py
 src/pipeline/sky.py
