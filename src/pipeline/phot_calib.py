@@ -1,14 +1,12 @@
 import sys, os
-sys.path.append(os.path.abspath('./src/pipeline'))
 import numpy as np
 from astropy.table import Table
 from astropy.coordinates import SkyCoord
 from astropy.wcs import WCS
 import matplotlib.pyplot as plt
 import astropy.io.fits as fits
-from astropy.stats import sigma_clipped_stats, sigma_clip
+from astropy.stats import sigma_clip
 from astropy.modeling import models, fitting
-from scipy.stats import mode
 from scipy.optimize import curve_fit
 from masking import region_mask
 from utils import radec
@@ -23,7 +21,7 @@ def stdz_mag(count,z_p,a):
         #mag = -2.5*np.log10(count) + z_p
         return a*count+z_p#mag
 
-class Phot:
+class Phot():
     def __init__(self, path, obj,file_name, pix):
         self.path = path
         self.obj = obj
@@ -31,15 +29,15 @@ class Phot:
         self.pix = pix
         self.data = Table.read(path+'/sky_subed/'+self.file_name+'.cat', format='ascii', converters={'obsid':str})
         self.sdss = Table.read(path + '/sdss_'+obj+'.csv', format='ascii') #check!! 
-        
+        self.hdu, self.hdr = fits.getdata(path+'/sky_subed/'+file_name+'.fits', header=True)
 
-    def bkg_std(self,hdul,frame_size=2048, offset=15, plot=False):
-        hdu = hdul.data
-        hdr = hdul.header
+    def bkg_std(self,frame_size=2048, offset=15, plot=False):
+        hdu = self.hdu
+        hdr = self.hdr
         wcs = WCS(hdr)
         ra, dec = radec(self.obj)
-        cen_coord = SkyCoord(ra, dec, frame='fk5', unit='deg')
-        x, y = wcs.world_to_pixel(cen_coord)
+        #cen_coord = get_icrs_coordinates(self.obj)#SkyCoord(ra=ra, dec=dec,frame='icrs', unit='deg')
+        x,y = wcs.all_world2pix(ra, dec,0)#wcs.world_to_pixel(cen_coord)#
         std_list = []
         size = int(10/self.pix)
         area = int(frame_size - ((2*offset*60)/self.pix))
@@ -69,7 +67,7 @@ class Phot:
         """
         std_array = np.array(std_list)
         #print(std_array)
-        std_median = np.nanmedian(std_array)
+        std_median = np.median(std_array)
         print(f'sigma={std_median}')
         self.bkg_noise = std_median
         if plot == True:
@@ -93,8 +91,8 @@ class Phot:
         data = self.data
         sdss = self.sdss
         #extract coordinate
-        sdsscat = sdss['ra', 'dec', 'g','r','u', 'Err_r', 'Err_g', 'Err_u']
-        objcat = data['ALPHAPEAK_J2000','DELTAPEAK_J2000','FLUX_BEST', 'MAGERR_BEST']#, 'ERRAWIN_IMAGE', 'ERRBWIN_IMAGE']
+        sdsscat = sdss['ra', 'dec', 'g','r','u', 'Err_r', 'Err_g', 'Err_u']#[sdss[color]>15]
+        objcat = data['ALPHAPEAK_J2000','DELTAPEAK_J2000','FLUX_BEST']#, 'MAGERR_BEST']#, 'ERRAWIN_IMAGE', 'ERRBWIN_IMAGE']
         #obj_cat = objcat[(objcat['ERRAWIN_IMAGE']<0.01)&(objcat['ERRBWIN_IMAGE']<0.01)]
         sdss_coord = SkyCoord(ra=sdsscat['ra'], dec=sdsscat['dec'],unit='deg', frame='fk5')
         obj_coord = SkyCoord(ra=objcat['ALPHAPEAK_J2000'], dec=objcat['DELTAPEAK_J2000'],unit='deg', frame='fk5')
@@ -105,27 +103,29 @@ class Phot:
 
         obj_flux = obj_f['FLUX_BEST']
         
-        sdss_mag = sdss_data[color]
+        sdss_mag1 = sdss_data[color]
         z_m = -2.5*np.log10(np.array(obj_flux))
-        sdss_mag = np.array(sdss_mag)
-        u = sdss_data['u']
-        g = sdss_data['g']
-        r = sdss_data['r']
+        sdss_mag = np.array(sdss_mag1)
+        
 
         #m = -2.5*np.log10(count)
-        zm = sigma_clip(z_m, cenfunc='median', stdfunc='mad_std', sigma=2)
+        zm = sigma_clip(z_m, cenfunc='median', stdfunc='mad_std',sigma_lower=1.3,sigma_upper=1.8)
         m = z_m[zm.mask==False]
         mag = sdss_mag[zm.mask==False]
         mM = mag - m
         
         z =  sigma_clip(mM, cenfunc='median', stdfunc='mad_std',sigma=3)
+        """
         obj_magerr = obj_f['MAGERR_BEST'][zm.mask==False]
         sdss_magerr = sdss_data[str('Err_'+color)][zm.mask==False]
         mag_err = obj_magerr[z.mask==False]
         sdss_err = sdss_magerr[z.mask==False]
+        """
         saturated = mag[z.mask==True]
 
-        """
+        u = sdss_data['u'][zm.mask==False]
+        g = sdss_data['g'][zm.mask==False]
+        r = sdss_data['r'][zm.mask==False]
         r1 = r[z.mask==False]
         g1 = g[z.mask==False]
         u1 = u[z.mask==False]
@@ -139,29 +139,35 @@ class Phot:
         else :
             c = u1
             c_refer = g1
-        """
+        
         print(f'# of detected stars = {len(z_m)}')
         print(f'Fitted star fraction = {len(mag[z.mask==False])/len(sdss_mag):.4f}')
         print(f'Saturated star fraction = {len(saturated)/len(sdss_mag):.4f}')
         
         t_r = m[z.mask==False]
         z0 = np.ma.median(z)
+        """
         fit = fitting.LinearLSQFitter()
         l_init = models.Linear1D(slope=1, intercept=z0)
         fitted_line = fit(l_init, t_r, mag[z.mask==False])
         a = np.array(fitted_line.slope)
         zp = np.array(fitted_line.intercept)
         """
-        def std_formular(count1, zp,a):
-            return a*count1+zp #-2.5*np.log10(count1) + z1
-
-        popt,pcov = curve_fit(std_formular,t_r,mag[z.mask==False],p0=[z0,1], sigma=np.ma.std(m[z.mask==False]), maxfev=1000)
+        z0 = np.ma.median(mM)#popt[0]
+        def std_formular(count1,zp,a,a1):
+            return a*count1+a1*(c-c_refer)+zp #-2.5*np.log10(count1) + z1
+        popt,pcov = curve_fit(std_formular,t_r,mag[z.mask==False],p0=[z0,1,1], sigma=np.ma.std(mM[z.mask==False]), maxfev=1000)#np.ma.std(m[z.mask==False])
+        #print(f'a = {popt[1]}')
+        #print(f'a1 = {popt[2]}')
         zp = popt[0]
-        """
+        
+        #plt.scatter((c-c_refer), std_formular(t_r, *popt)-c,alpha=0.5, s=c)
+        #plt.show();sys.exit()
         #a,z0 = np.median(alpha*(l1-l2)), zp
         sb_lim = zp - 2.5*np.log10(1*self.bkg_noise/(self.pix*10))
         print(f'Z_p = {zp}')
-        print(f'a = {a}')
+        print(f'a = {popt[1]}')
+        print(f'a1 = {popt[2]}')
         print(f'1sigma SB Limit = {sb_lim}')
 
         if plot == True:
@@ -180,7 +186,11 @@ class Phot:
             #ax[1].scatter(t_r,c,s=2,c='r')
             m.sort()
             x = np.linspace(np.min(z_m), np.max(z_m), len(z_m))
-            ax[1].plot(10**(-0.4*x),fitted_line(x),c='k',linewidth=1.5)
+            def line(x, a,b):
+                return a*x+b
+            popt_line, pcov_line = curve_fit(line, t_r, std_formular(t_r, *popt))
+            ax[1].plot(10**(-0.4*x),line(x,*popt_line),c='k',linewidth=1.5)
+            #ax[1].plot(10**(-0.4*x),fitted_line(x),c='k',linewidth=1.5)
 
             ax[1].set_xscale('log', base=10)
             
@@ -188,33 +198,35 @@ class Phot:
             ax[1].set_ylabel(f'$\mu_{color}$')    
             ax[1].text(np.min(10**(-0.4*z_m))+10, np.min(sdss_mag), f'$Z_p$ = {zp:.2f}'+'\n$\mu_{limit,1\sigma}$'+f' = {sb_lim:.2f}', bbox={'boxstyle':'square', 'fc':'white'})
             ax[1].set_title(f'{color}-band SB limit of {self.obj}')
+            #fig.suptitle('Color & Slope corr')
             plt.show()
         
-        return zp,a, sb_lim, len(z_m)
+        return zp, sb_lim, len(z_m)
 
 
 
 def sb_limit_proc(path, obj,file_name,pix,frame_size,offset,color=str, plot=False):
-    hdul = fits.open(path+'/sky_subed/'+file_name+'.fits')[0]
-    hdr = hdul.header
-    exptime = np.array(hdr['EXPTIME'], dtype=np.float32)
     phot = Phot(path, obj,file_name,pix)
-    std_noise = phot.bkg_std(hdul, frame_size,offset, plot=plot)
-    zp,a, sb_lim, num_star = phot.phot_stdz(color, plot=plot)
-
+    exptime = np.array(phot.hdr['EXPTIME'], dtype=np.float32)
+    std_noise = phot.bkg_std(frame_size,offset, plot=True)
+    zp,sb_lim, num_star = phot.phot_stdz(color, plot=plot)
 """
-    return exptime, std_noise, zp, a, sb_lim, num_star
+path = '~/NGC5907'
+sb_limit_proc(path, 'NGC5907', 'coadd', 1.89, 2048, 10, 'r', plot=True)
+"""
+"""
+    return exptime, std_noise, zp, sb_lim, num_star
 
-data_list = [['obj','exptime', 'std_noise', 'zp', 'a', 'sb_lim', 'num_star']]    
+data_list = [['obj','exptime', 'std_noise', 'zp', 'sb_lim', 'num_star']]    
 ssd_path = '/volumes/ssd/intern/25_summer'
 obj_list = ['M101','M51','NGC6946','NGC4236', 'NGC5907']
 file_list = ['M101_L', 'M51_L', 'NGC6946_L','NGC4236_r','NGC5907_r']
 for i in range(len(file_list)):
-    exptime, std_noise, zp, a, sb_lim, num_star =sb_limit_proc(ssd_path+'/'+file_list[i], obj_list[i], 'coadd', 1.89, 2048 ,20,'r', plot=False)
-    data_list.append([obj_list[i],exptime, std_noise, zp, a, sb_lim, num_star])
+    exptime, std_noise, zp, sb_lim, num_star =sb_limit_proc(ssd_path+'/'+file_list[i], obj_list[i], 'coadd', 1.89, 2048 ,20,'r', plot=False)
+    data_list.append([obj_list[i],exptime, std_noise, zp, sb_lim, num_star])
 
 import csv
-f = open('/Users/jang-in-yeong/phot_data.csv', 'w',newline='', encoding='ascii')
+f = open('/Users/jang-in-yeong/phot_data_ver1.csv', 'w',newline='', encoding='ascii')
 writer = csv.writer(f)
 writer.writerows(data_list)
 """

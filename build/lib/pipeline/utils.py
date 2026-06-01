@@ -39,5 +39,5 @@ def prt_process(input):
     print(input + ' is/are done.')
 
 from astropy.visualization import simple_norm
-def norm(x):
-    return simple_norm(x, 'linear', percent=99)
+def norm(x, percent):
+    return simple_norm(x, 'linear', percent=percent)

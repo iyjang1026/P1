@@ -128,12 +128,14 @@ def region_mask(hdu, thrsh,pix_scale,disk_r=100,ampglow=True):
 
     return np.array(masked, dtype=np.int8)
 
-def obj_rej_mask(hdu, thrsh,hdr,ra,dec,npix=5,kernel_size=3,ngrow=1, mask=None,ellipse_mask=True,bkg_thrsh=False):
-    if type(mask)!=np.ndarray:
-        mask1 = np.where((hdu==0)|(hdu>=hdr['SATURATE']*0.95), 1,0) #np.where(hdu==0, 1, 0)#
-    else:
-        mask1 = np.where((mask==1)|(hdu>=hdr['SATURATE']*0.95),1,0)#mask#
-        
+def obj_rej_mask(hdu, thrsh,hdr,ra,dec,npix=5,deblend_pix=2000,kernel_size=3,ngrow=1, satu_mask=False, mask=None,ellipse_mask=True,bkg_thrsh=False):
+    if satu_mask == True:
+        if type(mask)!=np.ndarray:
+            mask1 = np.where((hdu==0)|(hdu>=hdr['SATURATE']*0.95), 1,0) #np.where(hdu==0, 1, 0)#
+        else:
+            mask1 = np.where((mask==1)|(hdu>=hdr['SATURATE']*0.95),1,0)#mask#
+    else :
+        mask1 = np.where(hdu==0, 1,0)
     bkg_est = MedianBackground()
     bkg = Background2D(hdu, (64,64), filter_size=(5,5), bkg_estimator=bkg_est, mask=mask1)
     data = hdu - bkg.background
@@ -142,9 +144,8 @@ def obj_rej_mask(hdu, thrsh,hdr,ra,dec,npix=5,kernel_size=3,ngrow=1, mask=None,e
     conv_hdu = convolve(data, kernel)
     seg_map = detect_sources(conv_hdu, threshold, n_pixels=npix,connectivity=4, mask=mask1) #1차 천체 탐지
     segm_deblend = deblend_sources(conv_hdu, seg_map,
-                               n_pixels=2000, n_levels=32, contrast=0.0,connectivity=4,mode='linear',
+                               n_pixels=deblend_pix, n_levels=32, contrast=0.0,connectivity=4,mode='linear',
                                progress_bar=False) #천체분리
-        
     cat = SourceCatalog(data,segm_deblend, convolved_data=conv_hdu)
 
     a_list = list(cat.semiminor_axis.value)
@@ -156,8 +157,8 @@ def obj_rej_mask(hdu, thrsh,hdr,ra,dec,npix=5,kernel_size=3,ngrow=1, mask=None,e
     cat = cat[top_idx]
     x,y = cat.x_centroid,cat.y_centroid
     w = WCS(hdr)
-    eq_coord = SkyCoord(ra,dec,frame='fk5',unit='deg')
-    pix_x,pix_y = w.world_to_pixel(eq_coord)
+    #eq_coord = SkyCoord(ra,dec,frame='fk5',unit='deg')
+    pix_x,pix_y = w.all_world2pix(ra, dec,0)#world_to_pixel(eq_coord)
     idx = np.where((np.min(abs(pix_x-x))==abs(pix_x-x))&(np.min(abs(pix_y-y)==abs(pix_y-y))))
     cat1 = cat[idx]
     segm_deblend.remove_label(cat1.label)
