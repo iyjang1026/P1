@@ -135,7 +135,7 @@ def se_mask(hdu,threshold=2,pix=1.89,kernel_size=1,ngrow=1,disk_r=100, ampglow=F
             masked = np.where(masked_map0!=0, 1, 0).astype(np.int8)
 
     return np.array(masked, dtype=np.int8)
-
+"""
 from astropy.io import fits
 from pipeline.utils import norm
 hdu = fits.getdata('~/NGC5907/db_subed/db_subed0000.fit')
@@ -143,7 +143,7 @@ mask = se_mask(hdu, 2., ampglow=True)
 masked = np.ma.masked_array(hdu, mask)
 plt.imshow(masked, norm=norm(masked, percent=90), origin='lower')
 plt.show();sys.exit()
-
+"""
 
 def region_mask(hdu, thrsh,pix_scale,kernel_size=1,ngrow=1,brght_num=20,disk_r=100,ampglow=True, ellipse_mask=True):
     z_arr = np.where(hdu!=0,0,1)
