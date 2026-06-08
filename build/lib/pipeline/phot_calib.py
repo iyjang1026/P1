@@ -5,7 +5,7 @@ from astropy.coordinates import SkyCoord
 from astropy.wcs import WCS
 import matplotlib.pyplot as plt
 import astropy.io.fits as fits
-from astropy.stats import sigma_clip
+from astropy.stats import sigma_clip, sigma_clipped_stats
 from masking import region_mask
 from utils import radec
 from astropy.visualization import simple_norm
@@ -74,7 +74,7 @@ class Phot():
         self.sdss = Table.read(path + '/sdss_'+obj+'.csv', format='ascii') #check!! 
         self.hdu, self.hdr = fits.getdata(path+'/sky_subed/'+file_name+'.fits', header=True)
 
-    def bkg_std(self,frame_size=2048, offset=15, plot=False):
+    def bkg_std(self,frame_size=2048,offset=15,size=5,frac=0.7,iter=2000,pos_return=False, plot=False):
         hdu = self.hdu
         hdr = self.hdr
         wcs = WCS(hdr)
@@ -82,42 +82,48 @@ class Phot():
         #cen_coord = get_icrs_coordinates(self.obj)#SkyCoord(ra=ra, dec=dec,frame='icrs', unit='deg')
         x,y = wcs.all_world2pix(ra, dec,0)#wcs.world_to_pixel(cen_coord)#
         std_list = []
-        size = int(10/self.pix)
         area = int(frame_size - ((2*offset*60)/self.pix))
         
         croped = hdu[int(y)-area//2:int(y)+area//2, int(x)-area//2:int(x)+area//2]
-        mask = np.zeros_like(hdu)
-        mask[int(y)-area//2:int(y)+area//2, int(x)-area//2:int(x)+area//2] += region_mask(croped, 1, self.pix, ampglow=False)
+        mask = np.ones_like(hdu)
+        mask[int(y)-area//2:int(y)+area//2, int(x)-area//2:int(x)+area//2] = region_mask(croped, 0.3, self.pix, ampglow=False, ellipse_mask=False)
         arr = np.where(mask!=0, np.nan, hdu)#np.ma.masked_where(mask, np.ma.masked_equal(hdu, 0))
         ran_x, ran_y = [], []
-        #for i in range(1000):
-        while len(std_list)<2000:
+
+        while len(std_list)<iter:
             rand_st_x = np.random.randint(x-area//2, x+area//2-size)
             rand_st_y = np.random.randint(y-area//2, y+area//2-size)
             bin_arr = arr[rand_st_y:rand_st_y+size, rand_st_x:rand_st_x+size]
-            if len(bin_arr[np.isnan(bin_arr)]) <1:
-                std1 = np.nanstd(bin_arr)
+            if len(bin_arr[~np.isnan(bin_arr)])/len(bin_arr.flatten()) >=frac:
+                std1 = np.ma.std(sigma_clip(bin_arr, cenfunc='median', stdfunc='mad_std', sigma=3))
                 std_list.append(std1)
                 ran_x.append(rand_st_x)
                 ran_y.append(rand_st_y)
         std_array = np.array(std_list)
         std_median = np.median(std_array)
+        pos_func = np.array(np.array(ran_x)/2048 + 2*np.array(ran_y)/4096)
         print(f'sigma={std_median}')
         self.bkg_noise = std_median
         if plot == True:
             hist_arr = arr[int(y)-area//2:int(y)+area//2, int(x)-area//2:int(x)+area//2]
             counts, bins = np.histogram(hist_arr, bins=64, range=(-500,500))
             width = (np.max(bins)-np.min(bins))/64
-            fig, ax = plt.subplots(1,2)
-            ax[0].scatter(ran_x, ran_y, s=3, c='tomato')
+            fig, ax = plt.subplots(1,2, figsize=(11,5))
+            ax[0].scatter(np.array(ran_x)+(size//2), np.array(ran_y)+(size//2), s=3, c='tomato')
             ax[0].imshow(arr, norm=norm(hist_arr), origin='lower')
-            ax[1].bar(bins[:-1], counts, width=width, color='C0')
+            ax[0].set_xlim(int(x)-area//2-10,int(x)+area//2+10)
+            ax[0].set_ylim(int(y)-area//2-10,int(y)+area//2+10)
+            #ax[1].bar(bins[:-1], counts, width=width, color='C0')
+            ax[1].hist(hist_arr[~np.isnan(hist_arr)], bins=32, color='C0')
             ax[1].axvline(x=np.nanmedian(hist_arr), linestyle='dashed', c='C1')
             ax[1].axvline(x=np.nanmedian(hist_arr)+std_median, linestyle='dotted', c='C1')
             ax[1].axvline(x=np.nanmedian(hist_arr)-std_median, linestyle='dotted', c='C1')
             plt.show()
         
-        return std_median
+        if pos_return == True:
+            return std_median, np.ma.std(pos_func)
+        else:
+            return std_median
 
     def phot_stdz(self,color, plot=False):
         data = self.data
@@ -178,9 +184,10 @@ class Phot():
         print(f'Z_p = {zp}')
         print(f'a = {a}')
         print(f'1sigma SB Limit = {sb_lim}')
-
+        #flux = 10**(-.4*(t_r))
+        #mag_err = abs(-2.5*(self.bkg_noise/(flux*np.log(10))))
         if plot == True:
-            fig,ax = plt.subplots(1,2)
+            fig,ax = plt.subplots(1,2, figsize=(11,5))
             bins=32
             #counts, bins = np.histogram(mM[~np.isnan(mM)], bins=32)
             width=(np.max(bins)-np.min(bins))/32
@@ -188,36 +195,37 @@ class Phot():
             ax[0].set_xlabel('$M - m$')
             ax[0].set_ylabel('# of stars')
             ax[0].axvline(x=zp, linestyle='dashed', linewidth=2, c='grey')
-            ax[1].scatter(10**(-0.4*m),sdss_mag,s=3,c='grey')
-            ax[1].scatter(10**(-0.4*t_r),mag[z.mask==False],s=2,c='r', alpha=0.5)
-            
-            m.sort()
-            x = np.linspace(np.min(m), np.max(m), len(m))
-            def line(x, a,b):
-                return a*x+b
-            ax[1].plot(10**(-0.4*x),line(x,a,zp),c='k',linewidth=1.5)
-            ax[1].set_xscale('log', base=10)
-            ax[1].set_xlabel('Flux(log10)')
+            ax[1].scatter(a*m+zp,sdss_mag,s=3,c='grey', label='saturated')
+            ax[1].scatter(a*t_r+zp,mag[z.mask==False],s=2,c='r', label='non-saturated')
+            ax[1].legend()
+            x = np.linspace(-100, 100, len(m))
+            def line(x):
+                return x
+            ax[1].plot(x,line(x),c='k',linewidth=1.5, linestyle='dashed', label='fitted')
+            #ax[1].set_xscale('log', base=10)
+            ax[1].set_xlabel('$L_{calib}$')
             ax[1].set_ylabel(f'$\mu_{color}$')    
-            ax[1].text(np.min(10**(-0.4*m))+10, np.min(sdss_mag), f'$Z_p$ = {zp:.2f}'+'\n$\mu_{limit,1\sigma}$'+f' = {sb_lim:.2f}', bbox={'boxstyle':'square', 'fc':'white'})
-            ax[1].set_title(f'{color}-band SB limit of {self.obj}')
+            ax[1].set_ylim(20, 10)
+            ax[1].set_xlim(20,10)
+            ax[1].text(np.ma.min(a*m+zp)+3, np.max(sdss_mag)-0.5, f'$Z_p$ = {zp:.2f}'+'\n$\mu_{limit,1\sigma}$'+f' = {sb_lim:.2f}', bbox={'boxstyle':'square', 'fc':'white'})
+            ax[1].set_title(f'{color}-band Calib of {self.obj}')
             plt.show()
         
         return a, zp, sb_lim, len(m)
 
 
 
-def sb_limit_proc(path, obj,file_name,pix,frame_size,offset,color=str, plot=False):
+def sb_limit_proc(path, obj,file_name,pix,frame_size,offset,color=str,bkg_plot=False, plot=False):
     phot = Phot(path, obj,file_name,pix)
     exptime = np.array(phot.hdr['EXPTIME'], dtype=np.float32)
-    std_noise = phot.bkg_std(frame_size,offset, plot=False)
+    std_noise = phot.bkg_std(frame_size=2048,offset=20, size=42,frac=0.6,iter=2000, plot=bkg_plot)
     a, zp,sb_lim, num_star = phot.phot_stdz(color, plot=plot)
 
     #return exptime, std_noise,a, zp, sb_lim, num_star
 
 """
 path = '~/NGC5907'
-sb_limit_proc(path, 'NGC5907', 'coadd', 1.89, 2048, 20, 'r', plot=True)
+sb_limit_proc(path, 'NGC5907', 'coadd', 1.89, 2048, 20, 'r',bkg_plot=True, plot=True)
 """
 """
 data_list = [['obj','exptime', 'std_noise', 'a','zp', 'sb_lim', 'num_star']]    

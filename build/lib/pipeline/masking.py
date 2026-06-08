@@ -2,11 +2,12 @@ import numpy as np
 from astropy.convolution import convolve
 from photutils.segmentation import detect_sources, make_2dgaussian_kernel, SourceCatalog, deblend_sources, SegmentationImage
 from photutils.background import MedianBackground, Background2D
-from photutils.aperture import EllipticalAperture
+from photutils.aperture import EllipticalAperture, CircularAperture
 from scipy.ndimage import binary_dilation
 from skimage.morphology import disk
 from astropy.wcs import WCS
-from astropy.coordinates import SkyCoord
+from astropy.coordinates import SkyCoord, get_icrs_coordinates
+import sep
 import matplotlib.pyplot as plt
 import sys
 
@@ -24,57 +25,64 @@ def simple_masking(arr, detect_threshold=1.5, n_pixels=300):
     masked = np.where((mask_map_d!=0), 1, 0)
     return masked.astype(np.int8)
 
-def region_mask(hdu, thrsh,pix_scale,disk_r=100,ampglow=True):
-    z_arr = np.where(hdu!=0,0,1)
+def se_mask(hdu,threshold=2,pix=1.89,kernel_size=1,ngrow=1,disk_r=100, ampglow=False, obj_rejc=False, hdr=None,obj=None):
+    z_arr = np.where(hdu!=0,0,1).astype(np.float32)
     if type(ampglow)==bool:
         if ampglow==True:
             half = disk(disk_r)
-            z_arr = np.zeros_like(hdu)
+            z_arr = np.zeros_like(hdu, dtype=np.float32)
             z_arr[2048-disk_r:2048,1212-disk_r-1:1212+disk_r] += half[0:disk_r,:]
         elif ampglow==False:
             half = None
-            z_arr = np.where(hdu!=0, 0,1)
+            z_arr = np.where(hdu!=0, 0,1).astype(np.float32)
     elif type(ampglow) == np.ndarray:
         half = disk(disk_r)
         z_arr0 = np.array(ampglow) #np.where(ampglow!=0,False,True)
         z_arr0[2048-disk_r:2048,1212-disk_r-1:1212+disk_r] += half[0:disk_r,:]
-        z_arr = np.where(z_arr0!=0,1,0)
-    
-    bkg_est = MedianBackground()
-    bkg = Background2D(hdu, (64,64), filter_size=(5,5), bkg_estimator=bkg_est, mask=z_arr)
-    data = hdu - bkg.background
-    threshold = thrsh*bkg.background_rms
-    kernel = make_2dgaussian_kernel(fwhm=3/pix_scale, size=9)
-    conv_hdu = convolve(data, kernel)
-    seg_map = detect_sources(conv_hdu, threshold, n_pixels=9, mask=z_arr)
-    segm_deblend = deblend_sources(conv_hdu, seg_map,
-                               n_pixels=2000,connectivity=8, mode='exponential', n_levels=32, contrast=0.001,
-                               progress_bar=False)
-    seg = np.array(seg_map)
-    
-    cat = SourceCatalog(data, segm_deblend, convolved_data=conv_hdu)
+        z_arr = np.where(z_arr0!=0,1,0).astype(np.float32)
 
+    data = np.array(hdu)
+    data1 = data.astype(data.dtype.newbyteorder('='))
+    bkg = sep.Background(data1, mask=z_arr)
+    subd = data - bkg
+    kernel = np.array(make_2dgaussian_kernel(3/pix, 5))
+    obj, seg_map = sep.extract(subd, threshold, err=bkg.rms(),minarea=5,mask=z_arr,filter_kernel=kernel,filter_type='conv',
+                               segmentation_map=True)
+    segm = SegmentationImage(seg_map)
+    cat = SourceCatalog(hdu,segm)
     a_list = list(cat.semiminor_axis.value)
-    arr_zero = np.zeros_like(hdu).astype(np.float32) 
     tmp = a_list.copy()
     tmp.sort()
     tmp_num = tmp[-20:]
     top_idx = [a_list.index(x) for x in tmp_num]
+    cat = cat[top_idx]
+    if obj_rejc == True:
+        x,y = cat.x_centroid,cat.y_centroid
+        w = WCS(hdr)
+        eq_coord = get_icrs_coordinates(obj)#SkyCoord(ra,dec,frame='fk5',unit='deg')
+        pix_x,pix_y = w.world_to_pixel(eq_coord)
+        idx = np.where((np.min(abs(pix_x-x))==abs(pix_x-x))&(np.min(abs(pix_y-y)==abs(pix_y-y))))
+        cat1 = cat[idx]
+        segm.remove_label(cat1.label)
+    
+    mask0 = np.where(z_arr==True, 1, 0)
+    
+    segm_d = np.array(segm).astype(np.int32)
+    
+    segmd = SegmentationImage(segm_d)
+    cat = SourceCatalog(segmd, segm)
+    a_list = list(cat.semiminor_axis.value)
+    
+    tmp = a_list.copy()
+    tmp.sort()
+    tmp_num = tmp[-10:]
+    top_idx = [a_list.index(x) for x in tmp_num]
     for i in top_idx:
-        """
-        g_aper = l[i]
-        a = g_aper.a
-        b = g_aper.b
-        xypos = g_aper.positions
-        theta = g_aper.theta
-        xy = (int(xypos[0]), int(xypos[1]))
-        """
         cat0 = cat[i]
         xy = (cat0.x_centroid, cat0.y_centroid)
         theta = cat0.orientation.value *np.pi /180
         a,b = 3*cat0.semimajor_axis.value, 3*cat0.semiminor_axis.value
-        #aperture = EllipticalAperture(xy, 3*a, 3*b, theta)
-        aperture = EllipticalAperture(xy, 2*a, 2*b, theta=theta)
+        aperture =  CircularAperture(xy, 2*a)#EllipticalAperture(xy, 2*a, 2*b, theta=theta)#
         mask = np.array(aperture.to_mask(method='center')).astype(np.int8)
         mask_x, mask_y = mask.shape
     
@@ -108,10 +116,123 @@ def region_mask(hdu, thrsh,pix_scale,disk_r=100,ampglow=True):
         arr_y, mask_s_y, mask_l_y = lim(st_y, mask_y, y)
         mask = mask[mask_s_x:mask_l_x,mask_s_y:mask_l_y] 
         m_x, m_y = mask.shape #crop mask
-        arr_zero[arr_x:arr_x+m_x, arr_y:arr_y+m_y] += mask
+        mask0[arr_x:arr_x+m_x, arr_y:arr_y+m_y] += mask
+
+    kernel0 = disk(kernel_size) 
+    seg_d= binary_dilation(segm_d, kernel0, iterations=ngrow)+mask0
+    masked_map0 = np.where(seg_d!=0, 1, 0) + z_arr
     
-    kernel0 = disk(3) 
-    seg_d= binary_dilation(seg, kernel0, iterations=1)+arr_zero
+    if type(ampglow)!=np.ndarray:
+        if ampglow == True:
+            masked_map0[2048-disk_r:2048,1212-disk_r-1:1212+disk_r] += half[0:disk_r,:]
+            masked = np.where(masked_map0!=0, 1, 0).astype(np.int8)
+        elif ampglow == False:
+            masked_map = masked_map0
+            masked = np.where(masked_map!=0, 1, 0).astype(np.int8)
+    elif type(half)==np.ndarray:
+        if type(ampglow)==np.ndarray:
+            masked_map0 += z_arr
+            masked = np.where(masked_map0!=0, 1, 0).astype(np.int8)
+
+    return np.array(masked, dtype=np.int8)
+
+from astropy.io import fits
+from pipeline.utils import norm
+hdu = fits.getdata('~/NGC5907/db_subed/db_subed0000.fit')
+mask = se_mask(hdu, 2., ampglow=True)
+masked = np.ma.masked_array(hdu, mask)
+plt.imshow(masked, norm=norm(masked, percent=90), origin='lower')
+plt.show();sys.exit()
+
+
+def region_mask(hdu, thrsh,pix_scale,kernel_size=1,ngrow=1,brght_num=20,disk_r=100,ampglow=True, ellipse_mask=True):
+    z_arr = np.where(hdu!=0,0,1)
+    if type(ampglow)==bool:
+        if ampglow==True:
+            half = disk(disk_r)
+            z_arr = np.zeros_like(hdu)
+            z_arr[2048-disk_r:2048,1212-disk_r-1:1212+disk_r] += half[0:disk_r,:]
+        elif ampglow==False:
+            half = None
+            z_arr = np.where(hdu!=0, 0,1)
+    elif type(ampglow) == np.ndarray:
+        half = disk(disk_r)
+        z_arr0 = np.array(ampglow) #np.where(ampglow!=0,False,True)
+        z_arr0[2048-disk_r:2048,1212-disk_r-1:1212+disk_r] += half[0:disk_r,:]
+        z_arr = np.where(z_arr0!=0,1,0)
+    
+    bkg_est = MedianBackground()
+    bkg = Background2D(hdu, (64,64), filter_size=(5,5), bkg_estimator=bkg_est, mask=z_arr)
+    data = hdu - bkg.background
+    threshold = thrsh*bkg.background_rms
+    kernel = make_2dgaussian_kernel(fwhm=3/pix_scale, size=9)
+    conv_hdu = convolve(data, kernel)
+    seg_map = detect_sources(conv_hdu, threshold, n_pixels=9, mask=z_arr)
+    segm_deblend = deblend_sources(conv_hdu, seg_map,
+                               n_pixels=2000,connectivity=8, mode='exponential', n_levels=32, contrast=0.001,
+                               progress_bar=False)
+    seg = np.array(seg_map)
+    arr_zero = np.zeros_like(hdu).astype(np.float32) 
+    if ellipse_mask ==True:
+        cat = SourceCatalog(data, segm_deblend, convolved_data=conv_hdu)
+
+        a_list = list(cat.semiminor_axis.value)
+        tmp = a_list.copy()
+        tmp.sort()
+        tmp_num = tmp[-brght_num:]
+        top_idx = [a_list.index(x) for x in tmp_num]
+        for i in top_idx:
+            """
+            g_aper = l[i]
+            a = g_aper.a
+            b = g_aper.b
+            xypos = g_aper.positions
+            theta = g_aper.theta
+            xy = (int(xypos[0]), int(xypos[1]))
+            """
+            cat0 = cat[i]
+            xy = (cat0.x_centroid, cat0.y_centroid)
+            theta = cat0.orientation.value *np.pi /180
+            a,b = 3*cat0.semimajor_axis.value, 3*cat0.semiminor_axis.value
+            #aperture = EllipticalAperture(xy, 3*a, 3*b, theta)
+            aperture = EllipticalAperture(xy, 2*a, 2*b, theta=theta)
+            mask = np.array(aperture.to_mask(method='center')).astype(np.int8)
+            mask_x, mask_y = mask.shape
+        
+            st_x = np.int16(xy[1] - mask_x/2)
+            st_y = np.int16(xy[0] - mask_y/2)
+        
+            x, y = hdu.shape
+    
+            def lim(st, mask_s, arr_s):
+                if st < 0 and st+mask_s<arr_s:
+                    arr_st = 0
+                    mask_st = -st
+                    mask_l = mask_s
+                elif st<0 and st+mask_s>arr_s:
+                    arr_st = 0
+                    mask_st = -st
+                    mask_l = mask_s + st - arr_s
+            
+                elif st+mask_s > arr_s:
+                    arr_st = st
+                    mask_st = 0
+                    mask_l = arr_s - st
+
+                else:
+                    arr_st = st
+                    mask_st = 0
+                    mask_l = mask_s
+                return arr_st, mask_st, mask_l
+            
+            arr_x, mask_s_x, mask_l_x = lim(st_x, mask_x, x)
+            arr_y, mask_s_y, mask_l_y = lim(st_y, mask_y, y)
+            mask = mask[mask_s_x:mask_l_x,mask_s_y:mask_l_y] 
+            m_x, m_y = mask.shape #crop mask
+            arr_zero[arr_x:arr_x+m_x, arr_y:arr_y+m_y] += mask
+    
+    kernel0 = disk(kernel_size) 
+    seg_d= binary_dilation(seg, kernel0, iterations=ngrow)+arr_zero
     masked_map0 = np.where(seg_d!=0, 1, 0) + z_arr
     
     if type(ampglow)!=np.ndarray:

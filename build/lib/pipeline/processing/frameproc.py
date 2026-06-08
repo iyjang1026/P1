@@ -5,7 +5,7 @@ from astropy.stats import sigma_clipped_stats
 import numpy as np
 
 from sky import poly_sky_model, rbf_sky_model
-from masking import region_mask, simple_masking
+from masking import region_mask, simple_masking, se_mask
 
 class Master:
     def __init__(self, path=str, ext_type=0):
@@ -37,6 +37,7 @@ class Master:
     
     def amp_mask(self, threshold):
         mask = simple_masking(self.dark, detect_threshold=threshold)
+        save_fits(self.path+'/process', 'amp_mask', mask, ext_type=self.ext_type)
         self.ampl_mask = mask
 
     def master_flat(self):
@@ -82,6 +83,12 @@ class Process:
     def mask(self,hdu=np.ndarray,i=int,threshold=float,pix=float,amp_r=bool|np.ndarray,amp_mask=True):
         #hdu = fits.getdata(hdul)
         mask = region_mask(hdu, threshold,pix,disk_r=amp_r,ampglow=amp_mask)
+        n = format(i,'04')
+        save_fits(self.path+'/mask','mask_'+str(n),data=mask,ext_type=self.ext_type)
+
+    def se_mask(self,hdu=np.ndarray,i=int,threshold=float,pix=float,amp_r=bool|np.ndarray,amp_mask=True):
+        #hdu = fits.getdata(hdul)
+        mask = se_mask(hdu,threshold=threshold,pix=pix,disk_r=amp_r,ampglow=amp_mask)
         n = format(i,'04')
         save_fits(self.path+'/mask','mask_'+str(n),data=mask,ext_type=self.ext_type)
 

@@ -5,3 +5,4 @@ photutils
 scipy
 scikit-image
 ray
+sep
