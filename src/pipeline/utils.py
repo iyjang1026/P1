@@ -1,10 +1,13 @@
 import glob
-import os
+import os, sys
 from astropy.io import fits
+import numpy as np
+import matplotlib.pyplot as plt
 
 def mkdir(path, name):
     if not os.path.exists(path + '/'+name):
         os.mkdir(path +'/'+ name)
+    return str(path+'/'+name)
 
 def file_list(path, ext_type=0):
     if ext_type == 0:
@@ -16,14 +19,23 @@ def file_list(path, ext_type=0):
     file = sorted(glob.glob(path + '/*'+ext))
     return file
     
-def save_fits(path,name, data,hdr=None, ext_type=0, overwrite=True):
+def save_fits(path,name, data,hdr=None, ext_type=0, overwrite=True,norm=False):
+    if norm==True:
+        nan_mask = ~np.isfinite(data)
+        masked = np.ma.masked_array(data, nan_mask)
+        min, max = np.ma.min(masked), np.ma.max(masked)
+        normed = (masked-min)/(max-min)
+        output = np.where(normed.mask==True, np.nan, normed)
+    else :
+        output = data
+
     if ext_type == 0:
         ext = '.fits'
     elif ext_type == 1:
         ext = '.fit'
-    fits.writeto(path+'/'+name+ext, data,header=hdr, overwrite=overwrite)
+    fits.writeto(path+'/'+name+ext, output,header=hdr, overwrite=overwrite)
     #print(name + 'is/are saved at'+ path)
-    
+
 from astroquery.ipac.ned import Ned
 from astroquery.simbad import Simbad
 def radec(obj_name, catalog='simbad'):

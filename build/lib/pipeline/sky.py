@@ -1,14 +1,15 @@
 from astropy.io import fits
-from astropy.stats import sigma_clipped_stats
+from astropy.stats import sigma_clipped_stats, sigma_clip
 from astropy.modeling import models, fitting
 from scipy.interpolate import Rbf
+from scipy.stats import mode
 import numpy as np
 import warnings
 import sys
 
 warnings.filterwarnings('ignore')
     
-def poly_sky_model(data, bin, order=2):
+def poly_sky_model(data, bin,model=None, order=2):
     img_height, img_width = data.shape
 
     newImage = np.zeros((bin,bin), dtype=data.dtype)
@@ -34,7 +35,8 @@ def poly_sky_model(data, bin, order=2):
             y1 = j*new_height
             x1 = i*new_width
             pixel = data[y1:y1+new_height, x1:x1+new_width]
-            mean, median,std = sigma_clipped_stats(pixel, cenfunc='median',stdfunc='mad_std',sigma=3)
+            clipped = sigma_clip(pixel, cenfunc='median', stdfunc='mad_std', sigma=3)
+            median = np.ma.median(clipped)#mode(clipped[clipped.mask==False])[0]##mean, median,std = sigma_clipped_stats(pixel, cenfunc='median',stdfunc='mad_std',sigma=3)
             newImage[j,i] = median
             
     """
@@ -46,8 +48,10 @@ def poly_sky_model(data, bin, order=2):
     """
     modeling
     """
-
-    p_init = models.Polynomial2D(degree=order) #다항함수 모델링
+    if model == 'chevyshev':
+        p_init = models.Chebyshev2D(x_degree=order, y_degree=order)#Polynomial2D(degree=order)# #다항함수 모델링    
+    else:
+        p_init = models.Polynomial2D(degree=order)# #다항함수 모델링
     fit_p = fitting.LinearLSQFitter()
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')

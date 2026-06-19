@@ -25,7 +25,7 @@ def simple_masking(arr, detect_threshold=1.5, n_pixels=300):
     masked = np.where((mask_map_d!=0), 1, 0)
     return masked.astype(np.int8)
 
-def se_mask(hdu,threshold=2,pix=1.89,kernel_size=1,ngrow=1,disk_r=100, ampglow=False, obj_rejc=False, hdr=None,obj=None):
+def se_mask(hdu,threshold=2,pix=1.89,kernel_size=1,ngrow=1,disk_r=100, ampglow=False,ellipse_mask=True,ell_num=10, obj_rejc=False, hdr=None,obj=None):
     z_arr = np.where(hdu!=0,0,1).astype(np.float32)
     if type(ampglow)==bool:
         if ampglow==True:
@@ -68,55 +68,58 @@ def se_mask(hdu,threshold=2,pix=1.89,kernel_size=1,ngrow=1,disk_r=100, ampglow=F
     mask0 = np.where(z_arr==True, 1, 0)
     
     segm_d = np.array(segm).astype(np.int32)
-    
-    segmd = SegmentationImage(segm_d)
-    cat = SourceCatalog(segmd, segm)
-    a_list = list(cat.semiminor_axis.value)
-    
-    tmp = a_list.copy()
-    tmp.sort()
-    tmp_num = tmp[-10:]
-    top_idx = [a_list.index(x) for x in tmp_num]
-    for i in top_idx:
-        cat0 = cat[i]
-        xy = (cat0.x_centroid, cat0.y_centroid)
-        theta = cat0.orientation.value *np.pi /180
-        a,b = 3*cat0.semimajor_axis.value, 3*cat0.semiminor_axis.value
-        aperture =  CircularAperture(xy, 2*a)#EllipticalAperture(xy, 2*a, 2*b, theta=theta)#
-        mask = np.array(aperture.to_mask(method='center')).astype(np.int8)
-        mask_x, mask_y = mask.shape
-    
-        st_x = np.int16(xy[1] - mask_x/2)
-        st_y = np.int16(xy[0] - mask_y/2)
-    
-        x, y = hdu.shape
-   
-        def lim(st, mask_s, arr_s):
-            if st < 0 and st+mask_s<arr_s:
-                arr_st = 0
-                mask_st = -st
-                mask_l = mask_s
-            elif st<0 and st+mask_s>arr_s:
-                arr_st = 0
-                mask_st = -st
-                mask_l = mask_s + st - arr_s
+    if ellipse_mask == True:
+        segmd = SegmentationImage(segm_d)
+        cat = SourceCatalog(segmd, segm)
+        a_list = list(cat.semiminor_axis.value)
         
-            elif st+mask_s > arr_s:
-                arr_st = st
-                mask_st = 0
-                mask_l = arr_s - st
+        tmp = a_list.copy()
+        tmp.sort()
+        if type(ell_num)==int:
+            tmp_num = tmp[-ell_num:]
+        else :
+            tmp_num = tmp
+        top_idx = [a_list.index(x) for x in tmp_num]
+        for i in top_idx:
+            cat0 = cat[i]
+            xy = (cat0.x_centroid, cat0.y_centroid)
+            theta = cat0.orientation.value *np.pi /180
+            a,b = 3*cat0.semimajor_axis.value, 3*cat0.semiminor_axis.value
+            aperture =  EllipticalAperture(xy, 2*a, 2*b, theta=theta) #CircularAperture(xy, 2*a)#
+            mask = np.array(aperture.to_mask(method='center')).astype(np.int8)
+            mask_x, mask_y = mask.shape
+        
+            st_x = np.int16(xy[1] - mask_x/2)
+            st_y = np.int16(xy[0] - mask_y/2)
+        
+            x, y = hdu.shape
+    
+            def lim(st, mask_s, arr_s):
+                if st < 0 and st+mask_s<arr_s:
+                    arr_st = 0
+                    mask_st = -st
+                    mask_l = mask_s
+                elif st<0 and st+mask_s>arr_s:
+                    arr_st = 0
+                    mask_st = -st
+                    mask_l = mask_s + st - arr_s
+            
+                elif st+mask_s > arr_s:
+                    arr_st = st
+                    mask_st = 0
+                    mask_l = arr_s - st
 
-            else:
-                arr_st = st
-                mask_st = 0
-                mask_l = mask_s
-            return arr_st, mask_st, mask_l
-        
-        arr_x, mask_s_x, mask_l_x = lim(st_x, mask_x, x)
-        arr_y, mask_s_y, mask_l_y = lim(st_y, mask_y, y)
-        mask = mask[mask_s_x:mask_l_x,mask_s_y:mask_l_y] 
-        m_x, m_y = mask.shape #crop mask
-        mask0[arr_x:arr_x+m_x, arr_y:arr_y+m_y] += mask
+                else:
+                    arr_st = st
+                    mask_st = 0
+                    mask_l = mask_s
+                return arr_st, mask_st, mask_l
+            
+            arr_x, mask_s_x, mask_l_x = lim(st_x, mask_x, x)
+            arr_y, mask_s_y, mask_l_y = lim(st_y, mask_y, y)
+            mask = mask[mask_s_x:mask_l_x,mask_s_y:mask_l_y] 
+            m_x, m_y = mask.shape #crop mask
+            mask0[arr_x:arr_x+m_x, arr_y:arr_y+m_y] += mask
 
     kernel0 = disk(kernel_size) 
     seg_d= binary_dilation(segm_d, kernel0, iterations=ngrow)+mask0
@@ -138,14 +141,14 @@ def se_mask(hdu,threshold=2,pix=1.89,kernel_size=1,ngrow=1,disk_r=100, ampglow=F
 """
 from astropy.io import fits
 from pipeline.utils import norm
-hdu = fits.getdata('~/NGC5907/db_subed/db_subed0000.fit')
-mask = se_mask(hdu, 2., ampglow=True)
+hdu = fits.getdata('~/NGC5907/pp/pp_NGC59070000.fit')
+mask = se_mask(hdu,1, ampglow=False, ell_num=None)
 masked = np.ma.masked_array(hdu, mask)
 plt.imshow(masked, norm=norm(masked, percent=90), origin='lower')
 plt.show();sys.exit()
 """
 
-def region_mask(hdu, thrsh,pix_scale,kernel_size=1,ngrow=1,brght_num=20,disk_r=100,ampglow=True, ellipse_mask=True):
+def region_mask(hdu, thrsh,pix_scale,kernel_size=1,ngrow=1,disk_r=100,ampglow=True, ellipse_mask=True, ell_num=20):
     z_arr = np.where(hdu!=0,0,1)
     if type(ampglow)==bool:
         if ampglow==True:
@@ -179,7 +182,10 @@ def region_mask(hdu, thrsh,pix_scale,kernel_size=1,ngrow=1,brght_num=20,disk_r=1
         a_list = list(cat.semiminor_axis.value)
         tmp = a_list.copy()
         tmp.sort()
-        tmp_num = tmp[-brght_num:]
+        if type(ell_num)==int:
+            tmp_num = tmp[-ell_num:]
+        else:
+            tmp_num = tmp
         top_idx = [a_list.index(x) for x in tmp_num]
         for i in top_idx:
             """
