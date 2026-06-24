@@ -75,7 +75,7 @@ class Phot():
         self.sdss = Table.read(path + '/sdss_'+obj+'.csv', format='ascii') #check!! 
         self.hdu, self.hdr = fits.getdata(path+'/sky_subed/'+file_name+'.fits', header=True)
 
-    def bkg_std(self,frame_size=2048,offset=15,max_pix=1024,frac=0.7,iter=2000,pos_return=False, plot=False):
+    def bkg_std(self,threshold=0.5, ell_num=4, frame_size=2048,offset=15,max_pix=1024,frac=0.7,iter=2000,pos_return=False, plot=False):
         hdu = self.hdu
         hdr = self.hdr
         wcs = WCS(hdr)
@@ -89,7 +89,7 @@ class Phot():
         
         croped = hdu[int(y)-area//2:int(y)+area//2, int(x)-area//2:int(x)+area//2]
         mask = np.ones_like(hdu)
-        mask[int(y)-area//2:int(y)+area//2, int(x)-area//2:int(x)+area//2] = region_mask(croped, 0.3, self.pix, ampglow=False, ellipse_mask=True)
+        mask[int(y)-area//2:int(y)+area//2, int(x)-area//2:int(x)+area//2] = region_mask(croped, threshold, self.pix, ampglow=False, ellipse_mask=True, ell_num=ell_num)
         arr = np.ma.masked_array(hdu, mask) #np.where(mask!=0, np.nan, hdu)#np.ma.masked_where(mask, np.ma.masked_equal(hdu, 0))
         ran_x, ran_y = [], []
         np.random.seed(0)
@@ -125,20 +125,22 @@ class Phot():
 
             #ax[1].bar(bins[:-1], counts, width=width, color='C0')
             #norm_arr = (hist_arr - np.nanmean(hist_arr))/np.nanstd(hist_arr)
-            ax[1].hist(hist_arr[hist_arr.mask==0], bins=32, color='C0', label=str(skew(hist_arr[hist_arr.mask==0])))
+            clipped = sigma_clip(hist_arr, cenfunc='median', stdfunc='mad_std')
+            ax[1].hist(hist_arr[hist_arr.mask==0], bins=32, color='C0', range=(np.ma.min(clipped)*1.5, np.ma.max(clipped)*1.5), label=str(skew(hist_arr[hist_arr.mask==0])))
             ax[1].axvline(x=np.median(hist_arr[hist_arr.mask==0]), linestyle='dashed', c='C1', label=f'median={np.median(hist_arr[hist_arr.mask==0]):.2f}')
-            ax[1].set_title(f'Total $\sigma=${np.ma.std(sigma_clip(arr, cenfunc='median', stdfunc='mad_std', sigma=3))}')
-            ax[1].set_xlabel('Normalized ADU')
+            ax[1].set_title(f'Total $\sigma=${np.ma.std(sigma_clip(arr, cenfunc='median', stdfunc='mad_std', sigma=3)):.2f}')
+            ax[1].set_xlabel('Pixel value')
             ax[1].set_ylabel('count')
             ax[1].legend()
             #norm_median = (median_array - np.nanmean(median_array))/np.nanstd(median_array)
             ax[2].hist(median_array, bins=32, color='C0', label=str(skew(median_array)))
             ax[2].axvline(x=np.median(median_array), linestyle='dashed', c='C1', label=f'median={np.median(median_array):.2f}')
-            ax[2].set_title(f'Sampling $\sigma=${np.ma.std(sigma_clip(median_array, cenfunc='median', stdfunc='mad_std', sigma=3))}')
-            ax[2].set_xlabel('Normalized ADU')
+            ax[2].set_title(f'Sampling $\sigma=${np.ma.std(sigma_clip(median_array, cenfunc='median', stdfunc='mad_std', sigma=3)):.2f}')
+            ax[2].set_xlabel('Pixel value')
             ax[2].set_ylabel('count')
             ax[2].legend()
             plt.show()
+            
         
         if pos_return == True:
             return std_median, np.ma.std(pos_func)
@@ -230,6 +232,7 @@ class Phot():
             ax[1].text(np.ma.min(a*m+zp)+3, np.max(sdss_mag)-0.5, f'$Z_p$ = {zp:.2f}'+'\n$\mu_{limit,1\sigma}$'+f' = {sb_lim:.2f}', bbox={'boxstyle':'square', 'fc':'white'})
             ax[1].set_title(f'{color}-band Calib of {self.obj}')
             plt.show()
+            
         
         return a, zp, sb_lim, len(m)
 
@@ -238,14 +241,14 @@ class Phot():
 def sb_limit_proc(path, obj,file_name,pix,frame_size,offset,color=str,bkg_plot=False, plot=False):
     phot = Phot(path, obj,file_name,pix)
     exptime = np.array(phot.hdr['EXPTIME'], dtype=np.float32)
-    std_noise = phot.bkg_std(frame_size=2048,offset=offset, max_pix=1024,frac=0.6,iter=2000, plot=bkg_plot)
+    std_noise = phot.bkg_std(frame_size=frame_size,offset=offset, max_pix=1024,frac=0.6,iter=2000, plot=bkg_plot)
     a, zp,sb_lim, num_star = phot.phot_stdz(color, plot=plot)
 
     #return exptime, std_noise,a, zp, sb_lim, num_star
 
 """
 path = '~/NGC5907'
-sb_limit_proc(path, 'NGC5907', 'coadd1', 1.89, 2048, 10, 'r',bkg_plot=True, plot=True)
+sb_limit_proc(path, 'NGC5907', 'clipped', 1.89, 2048, 10, 'r',bkg_plot=True, plot=True)
 """
 """
 data_list = [['obj','exptime', 'std_noise', 'a','zp', 'sb_lim', 'num_star']]    

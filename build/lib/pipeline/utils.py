@@ -10,12 +10,21 @@ def mkdir(path, name):
     return str(path+'/'+name)
 
 def file_list(path, ext_type=0):
+    ext = None
     if ext_type == 0:
         ext = '.fits'
+        #file = sorted(glob.glob(path + '/*.fits'))
     elif ext_type == 1:
         ext = '.fit'
+        #file = sorted(glob.glob(path + '/*.fit'))
     elif ext_type == 2:
-        ext = ".csv"
+        ext = '.csv'
+        #file = sorted(glob.glob(path + '/*.csv'))
+    elif ext_type == 3:
+        ext = '.wcs'
+        #file = sorted(glob.glob(path + '/*.wcs'))
+    else :
+        raise ValueError('it is not supported extension')
     file = sorted(glob.glob(path + '/*'+ext))
     return file
     
