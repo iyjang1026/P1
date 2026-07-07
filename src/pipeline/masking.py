@@ -25,7 +25,7 @@ def simple_masking(arr, detect_threshold=1.5, n_pixels=300):
     masked = np.where((mask_map_d!=0), 1, 0)
     return masked.astype(np.int8)
 
-def se_mask(hdu,threshold=2,pix=1.89,kernel_size=1,ngrow=1,disk_r=100, ampglow=False,ellipse_mask=True,ell_num=10, obj_rejc=False, hdr=None,obj=None):
+def se_mask(hdu,threshold=2,pix=1.89,npix=5,kernel_size=1,ngrow=1,disk_r=100, ampglow=False,ellipse_mask=True,ell_num=10, obj_rejc=False, hdr=None,obj_name=None, bkg_thrsh=False):
     z_arr = np.where(hdu!=0,0,1).astype(np.float32)
     if type(ampglow)==bool:
         if ampglow==True:
@@ -45,8 +45,8 @@ def se_mask(hdu,threshold=2,pix=1.89,kernel_size=1,ngrow=1,disk_r=100, ampglow=F
     data1 = data.astype(data.dtype.newbyteorder('='))
     bkg = sep.Background(data1, mask=z_arr)
     subd = data - bkg
-    kernel = np.array(make_2dgaussian_kernel(3/pix, 5))
-    obj, seg_map = sep.extract(subd, threshold, err=bkg.rms(),minarea=5,mask=z_arr,filter_kernel=kernel,filter_type='conv',
+    kernel = np.array(make_2dgaussian_kernel(3, 5))
+    obj, seg_map = sep.extract(subd, threshold, err=bkg.rms(),minarea=npix,mask=z_arr,filter_kernel=kernel,filter_type='conv',
                                segmentation_map=True)
     segm = SegmentationImage(seg_map)
     cat = SourceCatalog(hdu,segm)
@@ -59,13 +59,13 @@ def se_mask(hdu,threshold=2,pix=1.89,kernel_size=1,ngrow=1,disk_r=100, ampglow=F
     if obj_rejc == True:
         x,y = cat.x_centroid,cat.y_centroid
         w = WCS(hdr)
-        eq_coord = get_icrs_coordinates(obj)#SkyCoord(ra,dec,frame='fk5',unit='deg')
+        eq_coord = get_icrs_coordinates(obj_name)#SkyCoord(ra,dec,frame='fk5',unit='deg')
         pix_x,pix_y = w.world_to_pixel(eq_coord)
         idx = np.where((np.min(abs(pix_x-x))==abs(pix_x-x))&(np.min(abs(pix_y-y)==abs(pix_y-y))))
         cat1 = cat[idx]
         segm.remove_label(cat1.label)
     
-    mask0 = np.where(z_arr==True, 1, 0)
+    arr_zero = np.where(z_arr==True, 1, 0)
     
     segm_d = np.array(segm).astype(np.int32)
     if ellipse_mask == True:
@@ -119,11 +119,29 @@ def se_mask(hdu,threshold=2,pix=1.89,kernel_size=1,ngrow=1,disk_r=100, ampglow=F
             arr_y, mask_s_y, mask_l_y = lim(st_y, mask_y, y)
             mask = mask[mask_s_x:mask_l_x,mask_s_y:mask_l_y] 
             m_x, m_y = mask.shape #crop mask
-            mask0[arr_x:arr_x+m_x, arr_y:arr_y+m_y] += mask
+            arr_zero[arr_x:arr_x+m_x, arr_y:arr_y+m_y] += mask
 
-    kernel0 = disk(kernel_size) 
-    seg_d= binary_dilation(segm_d, kernel0, iterations=ngrow)+mask0
-    masked_map0 = np.where(seg_d!=0, 1, 0) + z_arr
+    #kernel0 = disk(kernel_size) 
+    #seg_d= binary_dilation(segm_d, kernel0, iterations=ngrow)+arr_zero
+    #masked_map0 = np.where(seg_d!=0, 1, 0) + z_arr
+
+    kernel8 = np.array([[1,1,1],[1,1,1],[1,1,1]])
+    kernel4 = np.array([[0,1,0],[1,1,1],[0,1,0]])
+    if ngrow == 1:
+        tot_mask = binary_dilation(segm_d, kernel4, iterations=1)
+    elif ngrow%2 == 1:
+        for i in range(ngrow-1):
+            ngrow = binary_dilation(segm_d, kernel4, iterations=1)
+            mask = binary_dilation(ngrow, kernel8, iterations=1)
+        tot_mask = binary_dilation(mask, kernel4, iterations=1)
+    else :
+        for i in range(ngrow):
+            ngrow = binary_dilation(segm_d, kernel4, iterations=1)
+            mask = binary_dilation(ngrow, kernel8, iterations=1)
+        tot_mask = mask
+        
+    masked_map = tot_mask + arr_zero #region 마스크 영상과 segmentation 마스크 영상을 합침
+    masked_map0 = np.where(masked_map!=0, 1, 0) + z_arr
     
     if type(ampglow)!=np.ndarray:
         if ampglow == True:
@@ -136,13 +154,19 @@ def se_mask(hdu,threshold=2,pix=1.89,kernel_size=1,ngrow=1,disk_r=100, ampglow=F
         if type(ampglow)==np.ndarray:
             masked_map0 += z_arr
             masked = np.where(masked_map0!=0, 1, 0).astype(np.int8)
-
-    return np.array(masked, dtype=np.int8)
+    if bkg_thrsh == True:
+        pos = (cat1[0].x_centroid, cat1[0].y_centroid)
+        aper = EllipticalAperture(pos, a=3*cat1[0].semimajor_axis.value, b=3*cat1[0].semiminor_axis.value,
+                                  theta=cat1[0].orientation.value*np.pi/180)
+        return np.array(masked, dtype=np.int8), threshold, aper
+    else:
+        return np.array(masked, dtype=np.int8)
+    #return np.array(masked, dtype=np.int8)
 """
 from astropy.io import fits
 from pipeline.utils import norm
-hdu = fits.getdata('~/NGC5907/pp/pp_NGC59070000.fit')
-mask = se_mask(hdu,1, ampglow=False, ell_num=None)
+hdu,hdr = fits.getdata('~/2026-05-14/psf_sub.fits', header=True)
+mask, aper, threshold = se_mask(hdu,0.7,npix=4,obj_rejc=True,obj_name='NGC5797',hdr=hdr, ampglow=False,ellipse_mask=True, ell_num=1, bkg_thrsh=True)
 masked = np.ma.masked_array(hdu, mask)
 plt.imshow(masked, norm=norm(masked, percent=90), origin='lower')
 plt.show();sys.exit()
@@ -238,8 +262,25 @@ def region_mask(hdu, thrsh,pix_scale,kernel_size=1,ngrow=1,disk_r=100,ampglow=Tr
             arr_zero[arr_x:arr_x+m_x, arr_y:arr_y+m_y] += mask
     
     kernel0 = disk(kernel_size) 
-    seg_d= binary_dilation(seg, kernel0, iterations=ngrow)+arr_zero
-    masked_map0 = np.where(seg_d!=0, 1, 0) + z_arr
+    #seg_d= binary_dilation(seg, kernel0, iterations=ngrow)+arr_zero
+    kernel8 = np.array([[1,1,1],[1,1,1],[1,1,1]])
+    kernel4 = np.array([[0,1,0],[1,1,1],[0,1,0]])
+    if ngrow == 1:
+        tot_mask = binary_dilation(seg, kernel4, iterations=1)
+    elif ngrow%2 == 1:
+        for i in range(ngrow-1):
+            ngrow = binary_dilation(seg, kernel4, iterations=1)
+            mask = binary_dilation(ngrow, kernel8, iterations=1)
+        tot_mask = binary_dilation(mask, kernel4, iterations=1)
+    else :
+        for i in range(ngrow):
+            ngrow = binary_dilation(seg, kernel4, iterations=1)
+            mask = binary_dilation(ngrow, kernel8, iterations=1)
+        tot_mask = mask
+        
+    masked_map = tot_mask + arr_zero #region 마스크 영상과 segmentation 마스크 영상을 합침
+    masked_map0 = np.where(masked_map!=0, 1, 0) + z_arr
+    
     
     if type(ampglow)!=np.ndarray:
         if ampglow == True:
@@ -255,7 +296,7 @@ def region_mask(hdu, thrsh,pix_scale,kernel_size=1,ngrow=1,disk_r=100,ampglow=Tr
 
     return np.array(masked, dtype=np.int8)
 
-def obj_rej_mask(hdu, thrsh,hdr,ra,dec,npix=5,deblend_pix=2000,kernel_size=3,ngrow=1, satu_mask=False, mask=None,ellipse_mask=True,bkg_thrsh=False):
+def obj_rej_mask(hdu, thrsh,hdr,ra,dec,npix=5,deblend_pix=2000,kernel_size=3,ngrow=1, satu_mask=False, mask=None,ellipse_mask=True, ell_num=10,bkg_thrsh=False):
     if satu_mask == True:
         if type(mask)!=np.ndarray:
             mask1 = np.where((hdu==0)|(hdu>=hdr['SATURATE']*0.95), 1,0) #np.where(hdu==0, 1, 0)#
@@ -267,11 +308,11 @@ def obj_rej_mask(hdu, thrsh,hdr,ra,dec,npix=5,deblend_pix=2000,kernel_size=3,ngr
     bkg = Background2D(hdu, (64,64), filter_size=(5,5), bkg_estimator=bkg_est, mask=mask1)
     data = hdu - bkg.background
     threshold = thrsh*bkg.background_rms
-    kernel = np.array([[0,1,0],[1,1,1],[0,1,0]])#make_2dgaussian_kernel(fwhm=3.0/1.89, size=5)
+    kernel = make_2dgaussian_kernel(fwhm=3, size=(5,5))#np.array([[0,1,0],[1,1,1],[0,1,0]])#
     conv_hdu = convolve(data, kernel)
     seg_map = detect_sources(conv_hdu, threshold, n_pixels=npix,connectivity=4, mask=mask1) #1차 천체 탐지
     segm_deblend = deblend_sources(conv_hdu, seg_map,
-                               n_pixels=deblend_pix, n_levels=32, contrast=0.0,connectivity=4,mode='linear',
+                               n_pixels=deblend_pix, n_levels=32, contrast=0.0001,connectivity=4,#mode='linear',
                                progress_bar=False) #천체분리
     cat = SourceCatalog(data,segm_deblend, convolved_data=conv_hdu)
 
@@ -284,8 +325,8 @@ def obj_rej_mask(hdu, thrsh,hdr,ra,dec,npix=5,deblend_pix=2000,kernel_size=3,ngr
     cat = cat[top_idx]
     x,y = cat.x_centroid,cat.y_centroid
     w = WCS(hdr)
-    #eq_coord = SkyCoord(ra,dec,frame='fk5',unit='deg')
-    pix_x,pix_y = w.all_world2pix(ra, dec,0)#world_to_pixel(eq_coord)
+    eq_coord = SkyCoord(ra,dec,frame='fk5',unit='deg')
+    pix_x,pix_y = w.world_to_pixel(eq_coord)#w.all_world2pix(ra, dec,0)#
     idx = np.where((np.min(abs(pix_x-x))==abs(pix_x-x))&(np.min(abs(pix_y-y)==abs(pix_y-y))))
     cat1 = cat[idx]
     segm_deblend.remove_label(cat1.label)
@@ -299,14 +340,14 @@ def obj_rej_mask(hdu, thrsh,hdr,ra,dec,npix=5,deblend_pix=2000,kernel_size=3,ngr
         
         tmp = a_list.copy()
         tmp.sort()
-        tmp_num = tmp[-10:]
+        tmp_num = tmp[-ell_num:]
         top_idx = [a_list.index(x) for x in tmp_num]
         for i in top_idx:
             cat0 = cat[i]
             xy = (cat0.x_centroid, cat0.y_centroid)
             theta = cat0.orientation.value *np.pi /180
             a,b = 3*cat0.semimajor_axis.value, 3*cat0.semiminor_axis.value
-            aperture = EllipticalAperture(xy, 2.5*a, 2.5*b, theta=theta)
+            aperture = EllipticalAperture(xy, 2*a, 2*b, theta=theta)
             mask = np.array(aperture.to_mask(method='center')).astype(np.int8)
             mask_x, mask_y = mask.shape
         
@@ -342,10 +383,26 @@ def obj_rej_mask(hdu, thrsh,hdr,ra,dec,npix=5,deblend_pix=2000,kernel_size=3,ngr
             m_x, m_y = mask.shape #crop mask
             mask1[arr_x:arr_x+m_x, arr_y:arr_y+m_y] += mask
         
-    kernel0 = disk(kernel_size) 
-    masked_map = np.where(segm_d!=0, 1, 0) + mask1 #region 마스크 영상과 segmentation 마스크 영상을 합침
-    masked_grow = binary_dilation(masked_map, kernel0, iterations=ngrow) #ngrow
-    masked = np.where(masked_grow!=0, 1, 0).astype(np.int8)
+    #kernel0 = disk(kernel_size) 
+    kernel8 = np.array([[1,1,1],[1,1,1],[1,1,1]])
+    kernel4 = np.array([[0,1,0],[1,1,1],[0,1,0]])
+    mask0 = np.where(segm_d!=0, 1, 0)
+    if ngrow == 1:
+        tot_mask = binary_dilation(mask0, kernel4, iterations=1)
+    elif ngrow%2 == 1:
+        for i in range(ngrow-1):
+            ngrow = binary_dilation(mask0, kernel4, iterations=1)
+            mask = binary_dilation(ngrow, kernel8, iterations=1)
+        tot_mask = binary_dilation(mask, kernel4, iterations=1)
+    else :
+        for i in range(ngrow):
+            ngrow = binary_dilation(mask0, kernel4, iterations=1)
+            mask = binary_dilation(ngrow, kernel8, iterations=1)
+        tot_mask = mask
+        
+    masked_map = tot_mask + mask1 #region 마스크 영상과 segmentation 마스크 영상을 합침
+    #masked_grow = binary_dilation(masked_map, kernel0, iterations=ngrow) #ngrow
+    masked = np.where(masked_map!=0, 1, 0).astype(np.int8)
     if bkg_thrsh == True:
         pos = (cat1[0].x_centroid, cat1[0].y_centroid)
         aper = EllipticalAperture(pos, a=3*cat1[0].semimajor_axis.value, b=3*cat1[0].semiminor_axis.value,

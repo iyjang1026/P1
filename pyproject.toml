@@ -12,7 +12,7 @@ requires-python = ">=3.12, <3.13"
 
 authors = [{ name = "In Yeong Jang", email = "iyjang1026@kasi.re.kr" }]
 dependencies = [
-	"numpy","astropy","astroquery","photutils","scipy","scikit-image","ray","sep", "matplotlib>=3.9.4,<3.11"
+	"numpy","astropy","astroquery","photutils>=3.0.0","scipy","scikit-image","ray","sep", "matplotlib>=3.9.4,<3.11"
 ]
 
 [project.urls]

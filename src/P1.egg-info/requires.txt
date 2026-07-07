@@ -1,7 +1,7 @@
 numpy
 astropy
 astroquery
-photutils
+photutils>=3.0.0
 scipy
 scikit-image
 ray

@@ -100,18 +100,21 @@ def bkg_sub(pp_list, mask_list, i, order, bkg_type='median'):
     if bkg_type == 'median':
         bkg_const= np.ma.median(clipped)
         data = hdu - bkg_const
+        hdr.append(('bkg_type', bkg_type, 'Background subtraction type'))
     elif bkg_type == 'mean':
         bkg_const= np.ma.mean(clipped)
         data = hdu - bkg_const
+        hdr.append(('bkg_type', bkg_type, 'Background subtraction type'))
     elif bkg_type == 'mode':
         bkg_const= mode(clipped[clipped.mask==False])[0]#
         data = hdu - bkg_const
+        hdr.append(('bkg_type', bkg_type, 'Background subtraction type'))
     elif bkg_type == 'polynomial':
         data, hdr = process.sky_sub(pp_list,mask_list,i, order, bin=bin)
+        hdr.append(('bkg_type', bkg_type+str(order), 'Background subtraction type'))
     else :
         raise ValueError('That type is not availiable')
     n = format(i, '04')
-    hdr.append(('bkg_type', bkg_type, 'Background subtraction type'))
     save_fits(pwd,process.obj+str(n),data=data.astype(np.float32),hdr=hdr,ext_type=process.ext_type,norm=False)
 
 ray.init(num_cpus=4)
@@ -125,7 +128,7 @@ print(f'eta={endtime-start_time}')
 
 
 #astrometry.sh generate
-process.astrometry(index_loc='~/solve/index4200',radius=1.5)
+process.astrometry(index_loc='~/solve/index4200',radius=1.5, use_scamp=True)
 endtime = time.time()
 print(f'eta={start_time-start_time}')
 sys.exit()

@@ -145,7 +145,7 @@ class Process:
         hdr.append(('sky_sub', str(bin), 'sky subtraction' ))
         return subed, hdr
         
-    def astrometry(self, index_loc=None, radius=float):
+    def astrometry(self, index_loc=None, radius=float, use_scamp=True):
         ext_type = self.ext_type
         if ext_type == 0:
             ext = '.fits'
@@ -153,9 +153,25 @@ class Process:
             ext = '.fit'
         ra,dec = radec(self.obj)
         file = open(self.path+'/'+self.obj+'.sh', 'w')
-        if index_loc != None:
-            file.write(f'solve-field --index-dir {index_loc} --use-source-extractor -3 {ra} -4 {dec} -5 {radius} --no-plots {self.obj}*{ext}\nrm -rf *.new *.xyls *.rdls *.corr *.axy *.solved *.match')
-        else:    
-            file.write(f'solve-field --use-source-extractor -3 {ra} -4 {dec} -5 {radius} --no-plots {self.obj}*{ext}\nrm -rf *.xyls *.rdls *.corr *.axy *.solved *.match')
+        if use_scamp==True:
+            if index_loc !=None:
+                file.write('for INPUT in *.fit; do\n'+
+                        '    BASENAME="${INPUT%.*}"\n'+
+                        '    echo "Processing: $INPUT"\n'+
+                        f'    solve-field --index-dir {index_loc} --use-source-extractor --scamp "$BASENAME".cat --scamp-config {self.obj}.scamp --scamp-ref {self.obj}.ref -3 {ra} -4 {dec} -5 1.5 --no-plot  "$INPUT" --overwrite --no-background-subtraction\n'+
+                        '    rm -rf *xyls *rdls *corr *match *new *wcs *axy *solved\n'+
+                        'done')
+            else :
+                file.write('for INPUT in *.fit; do\n'+
+                    '    BASENAME="${INPUT%.*}"\n'+
+                    '    echo "Processing: $INPUT"\n'+
+                    f'    solve-field --use-source-extractor --scamp "$BASENAME".cat --scamp-config "$BASENAME".scamp --scamp-ref "$BASENAME".ref -3 {ra} -4 {dec} -5 1.5 --no-plot  "$INPUT" --overwrite --no-background-subtraction\n'+
+                    '    rm -rf *xyls *rdls *corr *match *new *wcs *axy *solved\n'+
+                    'done')
+        else:
+            if index_loc != None:
+                file.write(f'solve-field --index-dir {index_loc} --use-source-extractor -3 {ra} -4 {dec} -5 {radius} --no-plots {self.obj}*{ext}\nrm -rf *.new *.xyls *.rdls *.corr *.axy *.solved *.match')
+            else:    
+                file.write(f'solve-field --use-source-extractor -3 {ra} -4 {dec} -5 {radius} --no-plots {self.obj}*{ext}\nrm -rf *.xyls *.rdls *.corr *.axy *.solved *.match')
         
         file.close()    

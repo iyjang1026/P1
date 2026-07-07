@@ -92,11 +92,12 @@ for i in range(iters):
     if i % 1000 == 0:
         print(loss)
 
-x1 = Variable(np.linspace(0,1,100).reshape(100,1))
+x1 = Variable(np.linspace(-20,1,100).reshape(100,1))
 y1 = predict(x1)
 print(W1.data,b1.data)
-plt.scatter(x.data, y.data, s=3)
-plt.plot(x1.data, y1.data, c='red')
+plt.scatter(W1.data*x.data+b1.data, y.data-(W1.data*x.data+b1.data), s=3)
+#plt.plot(x1.data, y1.data, c='red')
 plt.xlabel('$L_{inst}$')
-plt.ylabel('SDSS-r')
+plt.ylabel('$\Delta mag$')
+#plt.ylabel('SDSS-r')
 plt.show()
