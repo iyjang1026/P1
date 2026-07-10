@@ -248,7 +248,7 @@ def sb_limit_proc(path, obj,file_name,pix,frame_size,offset,color=str,bkg_plot=F
 
 """
 path = '~/NGC5907'
-sb_limit_proc(path, 'NGC5907', 'clipped', 1.89, 2048, 10, 'r',bkg_plot=True, plot=True)
+sb_limit_proc(path, 'NGC5907', 'coadd', 1.89, 2048, 10, 'r',bkg_plot=True, plot=True)
 """
 """
 data_list = [['obj','exptime', 'std_noise', 'a','zp', 'sb_lim', 'num_star']]    

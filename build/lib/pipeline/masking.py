@@ -411,7 +411,7 @@ def obj_rej_mask(hdu, thrsh,hdr,ra,dec,npix=5,deblend_pix=2000,kernel_size=3,ngr
     else:
         return np.array(masked, dtype=np.int8)
 
-def psf_obj_rej_mask(hdu, thrsh,hdr,ra,dec):
+def psf_obj_rej_mask(hdu, thrsh,hdr,ra,dec, ell_num=10):
     mask1 = np.where(hdu!=0, False, True)
     bkg_est = MedianBackground()
     bkg = Background2D(hdu, (64,64), filter_size=(3,3), bkg_estimator=bkg_est, mask=mask1)
@@ -433,17 +433,18 @@ def psf_obj_rej_mask(hdu, thrsh,hdr,ra,dec):
     arr_zero = np.zeros_like(hdu).astype(np.float32) 
     tmp = a_list.copy()
     tmp.sort()
-    tmp_num = tmp[-20:]
+    tmp_num = tmp[-ell_num:]
     top_idx = [a_list.index(x) for x in tmp_num]
+    """
     cat = cat[top_idx]
-    x,y = cat.xcentroid,cat.ycentroid
+    x,y = cat.x_centroid,cat.y_centroid
     w = WCS(hdr)
     eq_coord = SkyCoord(ra,dec,frame='fk5',unit='deg')
     pix_x,pix_y = w.world_to_pixel(eq_coord)
     idx = np.where((np.min(abs(pix_x-x))==abs(pix_x-x))&(np.min(abs(pix_y-y)==abs(pix_y-y))))
-    
+    """
     arr_zero = np.zeros_like(hdu).astype(np.float32) 
-    for i in idx:
+    for i in top_idx:
         """
         g_aper = l[i]
         a = g_aper.a
@@ -452,7 +453,7 @@ def psf_obj_rej_mask(hdu, thrsh,hdr,ra,dec):
         theta = g_aper.theta
         xy = (int(xypos[0]), int(xypos[1]))
         """
-        cat0 = cat[i][0]
+        cat0 = cat[i]
         xy = (cat0.x_centroid, cat0.y_centroid)
         theta = cat0.orientation.value *np.pi /180
         a,b = 3*cat0.semimajor_axis.value, 3*cat0.semiminor_axis.value
