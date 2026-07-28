@@ -20,6 +20,7 @@ src/cpnn/transforms.py
 src/cpnn/utils.py
 src/pipeline/__init__.py
 src/pipeline/ellipse.py
+src/pipeline/imgqual.py
 src/pipeline/masking.py
 src/pipeline/phot_calib.py
 src/pipeline/sky.py
