@@ -147,7 +147,7 @@ def se_mask(hdu,threshold=2,pix=1.89,npix=5,kernel_size=1,ngrow=1,disk_r=100, am
         if ampglow == True:
             masked_map0[2048-disk_r:2048,1212-disk_r-1:1212+disk_r] += half[0:disk_r,:]
             masked = np.where(masked_map0!=0, 1, 0).astype(np.int8)
-        elif ampglow == False:
+        elif (ampglow == False) or (ampglow == None):
             masked_map = masked_map0
             masked = np.where(masked_map!=0, 1, 0).astype(np.int8)
     elif type(half)==np.ndarray:
@@ -165,8 +165,8 @@ def se_mask(hdu,threshold=2,pix=1.89,npix=5,kernel_size=1,ngrow=1,disk_r=100, am
 """
 from astropy.io import fits
 from pipeline.utils import norm
-hdu,hdr = fits.getdata('~/2026-05-14/psf_sub.fits', header=True)
-mask, aper, threshold = se_mask(hdu,0.7,npix=4,obj_rejc=True,obj_name='NGC5797',hdr=hdr, ampglow=False,ellipse_mask=True, ell_num=1, bkg_thrsh=True)
+hdu,hdr = fits.getdata('~/Abell2634/r1/pp/pp_Abell26340000.fit', header=True)
+mask = se_mask(hdu,0.7,npix=4, ampglow=False,ellipse_mask=True, ell_num=10)
 masked = np.ma.masked_array(hdu, mask)
 plt.imshow(masked, norm=norm(masked, percent=90), origin='lower')
 plt.show();sys.exit()
@@ -286,7 +286,7 @@ def region_mask(hdu, thrsh,pix_scale,kernel_size=1,ngrow=1,disk_r=100,ampglow=Tr
         if ampglow == True:
             masked_map0[2048-disk_r:2048,1212-disk_r-1:1212+disk_r] += half[0:disk_r,:]
             masked = np.where(masked_map0!=0, 1, 0).astype(np.int8)
-        elif ampglow == False:
+        elif (ampglow == False) or (ampglow==None):
             masked_map = masked_map0
             masked = np.where(masked_map!=0, 1, 0).astype(np.int8)
     elif type(half)==np.ndarray:

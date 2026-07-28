@@ -151,8 +151,8 @@ class Phot():
         data = self.data
         sdss = self.sdss
         #extract coordinate
-        sdsscat = sdss['ra', 'dec', 'g','r','u', 'Err_r', 'Err_g', 'Err_u'][sdss[color]>12]
-        objcat = data['ALPHAPEAK_J2000','DELTAPEAK_J2000','FLUX_BEST', 'FLUXERR_BEST']
+        sdsscat = sdss['ra', 'dec', 'g','r','u', 'Err_r', 'Err_g', 'Err_u']#[sdss[color]>12]
+        objcat = data['ALPHAPEAK_J2000','DELTAPEAK_J2000','FLUX_BEST', 'FLUXERR_BEST']#[data['CLASS_STAR']>=0.75]
         sdss_coord = SkyCoord(ra=sdsscat['ra'], dec=sdsscat['dec'],unit='deg', frame='fk5')
         obj_coord = SkyCoord(ra=objcat['ALPHAPEAK_J2000'], dec=objcat['DELTAPEAK_J2000'],unit='deg', frame='fk5')
 
