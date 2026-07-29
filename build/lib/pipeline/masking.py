@@ -172,7 +172,7 @@ plt.imshow(masked, norm=norm(masked, percent=90), origin='lower')
 plt.show();sys.exit()
 """
 
-def region_mask(hdu, thrsh,pix_scale,kernel_size=1,ngrow=1,disk_r=100,ampglow=True, ellipse_mask=True, ell_num=20):
+def region_mask(hdu, thrsh,pix=1.89,npix=4,kernel_size=1,ngrow=1,disk_r=100,ampglow=False, ellipse_mask=True, ell_num=20):
     z_arr = np.where(hdu!=0,0,1)
     if type(ampglow)==bool:
         if ampglow==True:
@@ -192,9 +192,9 @@ def region_mask(hdu, thrsh,pix_scale,kernel_size=1,ngrow=1,disk_r=100,ampglow=Tr
     bkg = Background2D(hdu, (64,64), filter_size=(5,5), bkg_estimator=bkg_est, mask=z_arr)
     data = hdu - bkg.background
     threshold = thrsh*bkg.background_rms
-    kernel = make_2dgaussian_kernel(fwhm=3/pix_scale, size=9)
+    kernel = make_2dgaussian_kernel(fwhm=3/pix, size=9)
     conv_hdu = convolve(data, kernel)
-    seg_map = detect_sources(conv_hdu, threshold, n_pixels=9, mask=z_arr)
+    seg_map = detect_sources(conv_hdu, threshold, n_pixels=npix, mask=z_arr)
     segm_deblend = deblend_sources(conv_hdu, seg_map,
                                n_pixels=2000,connectivity=8, mode='exponential', n_levels=32, contrast=0.001,
                                progress_bar=False)

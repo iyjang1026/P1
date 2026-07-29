@@ -1,6 +1,7 @@
 from astropy.io import fits
 from astropy.stats import sigma_clipped_stats, sigma_clip
 from astropy.modeling import models, fitting
+from photutils.aperture import RectangularAperture
 from scipy.interpolate import Rbf
 from scipy.stats import mode
 import numpy as np
@@ -14,27 +15,32 @@ def poly_sky_model(data, bin,model=None, order=2):
 
     newImage = np.zeros((bin,bin), dtype=data.dtype)
 
-    new_height = img_height//bin
-    new_width = img_width//bin
+    new_height = img_height/bin
+    new_width = img_width/bin
 
     """
     the center position of binned pixel
     """
 
-    h_width = img_height//bin
-    w_width = img_width//bin
+    h_width = img_height/bin
+    w_width = img_width/bin
     x0 = np.arange(0,img_width,w_width)
     y0 = np.arange(0,img_height,h_width)
-    x,y = np.meshgrid(x0+w_width//2,y0+h_width//2, indexing='ij')   
-
+    x,y = np.meshgrid(x0+w_width/2,y0+h_width/2, indexing='ij')   
+    
     """
     binning
     """
     for j in range(bin):
         for i in range(bin):
+            """
             y1 = j*new_height
             x1 = i*new_width
-            pixel = data[y1:y1+new_height, x1:x1+new_width]
+            """
+            cen = (x[j,i],y[j,i])
+            aper = RectangularAperture(cen, w=new_width, h=new_height)
+            box = aper.bbox
+            pixel = data[box.iymin:box.iymax, box.ixmin:box.ixmax]#data[y1:y1+new_height, x1:x1+new_width]
             clipped = sigma_clip(pixel, cenfunc='median', stdfunc='mad_std', sigma=3)
             median = np.ma.median(clipped)#mode(clipped[clipped.mask==False])[0]##mean, median,std = sigma_clipped_stats(pixel, cenfunc='median',stdfunc='mad_std',sigma=3)
             newImage[j,i] = median
@@ -44,7 +50,7 @@ def poly_sky_model(data, bin,model=None, order=2):
     """        
   
     data_nc = np.ma.masked_invalid(newImage)
-
+    
     """
     modeling
     """
@@ -64,14 +70,14 @@ def rbf_sky_model(data, bin):
 
     newImage = np.zeros((bin,bin), dtype=np.float16)
 
-    new_height = img_height//bin
-    new_width = img_width//bin
+    new_height = img_height/bin
+    new_width = img_width/bin
 
     """
     the center position of binned pixel
     """
-    xx_m = np.arange(0,img_width, img_width/bin) + new_width//2
-    yy_m = np.arange(0, img_height, img_height/bin) + new_height//2
+    xx_m = np.arange(0,img_width, img_width/bin) + new_width/2
+    yy_m = np.arange(0, img_height, img_height/bin) + new_height/2
     
     x_grid, y_grid = np.meshgrid(xx_m,yy_m, indexing='ij')
     
@@ -80,9 +86,14 @@ def rbf_sky_model(data, bin):
     """
     for j in range(bin):
         for i in range(bin):
+            """
             y = j*new_height
             x = i*new_width
-            pixel = data[y:y+new_height, x:x+new_width]
+            """
+            cen = (x[j,i], y[j,i])
+            aper = RectangularAperture(cen, w=new_width, h=new_height)
+            box = aper.bbox
+            pixel = data[box.iymin:box.iymax, box.ixmin:box.ixmax]#[y:y+new_height, x:x+new_width]
             mean, median,std = sigma_clipped_stats(pixel, cenfunc='median',stdfunc='mad_std',sigma=3)
             newImage[j,i] += np.float16(median)
             
@@ -100,4 +111,3 @@ def rbf_sky_model(data, bin):
     """
     model = Rbf(y,x, data_nc, function='linear')#RBFInterpolator(coord,data_nc.ravel(),kernel='linear')
     return model(x1,y1)
-
