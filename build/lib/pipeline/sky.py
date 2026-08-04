@@ -1,9 +1,7 @@
-from astropy.io import fits
 from astropy.stats import sigma_clipped_stats, sigma_clip
 from astropy.modeling import models, fitting
 from photutils.aperture import RectangularAperture
 from scipy.interpolate import Rbf
-from scipy.stats import mode
 import numpy as np
 import warnings
 import sys
@@ -14,7 +12,7 @@ def poly_sky_model(data, bin,model=None, order=2):
     img_height, img_width = data.shape
 
     newImage = np.zeros((bin,bin), dtype=data.dtype)
-
+    weight = np.zeros_like(newImage)
     new_height = img_height/bin
     new_width = img_width/bin
 
@@ -37,13 +35,15 @@ def poly_sky_model(data, bin,model=None, order=2):
             y1 = j*new_height
             x1 = i*new_width
             """
-            cen = (x[j,i],y[j,i])
+            cen = (x[i,j],y[i,j])
             aper = RectangularAperture(cen, w=new_width, h=new_height)
             box = aper.bbox
             pixel = data[box.iymin:box.iymax, box.ixmin:box.ixmax]#data[y1:y1+new_height, x1:x1+new_width]
             clipped = sigma_clip(pixel, cenfunc='median', stdfunc='mad_std', sigma=3)
+            frac = len(clipped[clipped.mask==False])/np.size(clipped.data)
             median = np.ma.median(clipped)#mode(clipped[clipped.mask==False])[0]##mean, median,std = sigma_clipped_stats(pixel, cenfunc='median',stdfunc='mad_std',sigma=3)
             newImage[j,i] = median
+            weight[j,i] = frac
             
     """
     calculate matrix x and y, these are positon component or img
@@ -61,7 +61,7 @@ def poly_sky_model(data, bin,model=None, order=2):
     fit_p = fitting.LinearLSQFitter()
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        model = fit_p(p_init, x, y, data_nc) #하늘의 모델을 반환(x,y)
+        model = fit_p(p_init, x, y, data_nc, weights=weight) #하늘의 모델을 반환(x,y)
     x_model,y_model = np.meshgrid(np.arange(img_width),np.arange(img_height), indexing='ij')
     return model(x_model, y_model)
 
