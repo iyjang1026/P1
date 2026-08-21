@@ -35,7 +35,7 @@ def poly_sky_model(data, bin,model=None, order=2):
             y1 = j*new_height
             x1 = i*new_width
             """
-            cen = (x[i,j],y[i,j])
+            cen = (x[j,i],y[j,i])
             aper = RectangularAperture(cen, w=new_width, h=new_height)
             box = aper.bbox
             pixel = data[box.iymin:box.iymax, box.ixmin:box.ixmax]#data[y1:y1+new_height, x1:x1+new_width]
@@ -62,7 +62,7 @@ def poly_sky_model(data, bin,model=None, order=2):
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         model = fit_p(p_init, x, y, data_nc, weights=weight) #하늘의 모델을 반환(x,y)
-    x_model,y_model = np.meshgrid(np.arange(img_width),np.arange(img_height), indexing='ij')
+    x_model,y_model = np.meshgrid(np.arange(img_height),np.arange(img_width), indexing='ij')
     return model(x_model, y_model)
 
 def rbf_sky_model(data, bin):
