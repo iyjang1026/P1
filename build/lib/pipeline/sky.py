@@ -8,7 +8,7 @@ import sys
 
 warnings.filterwarnings('ignore')
     
-def poly_sky_model(data, bin,model=None, order=2):
+def poly_sky_model(data:np.ndarray|np.ma.masked_array, bin, model:str='polynomial', order=2):
     img_height, img_width = data.shape
 
     newImage = np.zeros((bin,bin), dtype=data.dtype)
@@ -24,8 +24,7 @@ def poly_sky_model(data, bin,model=None, order=2):
     w_width = img_width/bin
     x0 = np.arange(0,img_width,w_width)
     y0 = np.arange(0,img_height,h_width)
-    x,y = np.meshgrid(x0+w_width/2,y0+h_width/2, indexing='ij')   
-    
+    y,x = np.meshgrid(x0+w_width/2,y0+h_width/2, indexing='ij')   
     """
     binning
     """
@@ -51,20 +50,32 @@ def poly_sky_model(data, bin,model=None, order=2):
   
     data_nc = np.ma.masked_invalid(newImage)
     
+    
     """
     modeling
     """
-    if model == 'chevyshev':
+    if model == 'chebyshev':
         p_init = models.Chebyshev2D(x_degree=order, y_degree=order)#Polynomial2D(degree=order)# #다항함수 모델링    
-    else:
+    elif model == 'polynomial':
         p_init = models.Polynomial2D(degree=order)# #다항함수 모델링
+    else:
+        raise ValueError(f'{model} is not supported.')
     fit_p = fitting.LinearLSQFitter()
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         model = fit_p(p_init, x, y, data_nc, weights=weight) #하늘의 모델을 반환(x,y)
-    x_model,y_model = np.meshgrid(np.arange(img_height),np.arange(img_width), indexing='ij')
+    y_model,x_model = np.meshgrid(np.arange(img_height),np.arange(img_width), indexing='ij')
     return model(x_model, y_model)
-
+"""
+import astropy.io.fits as fits
+import matplotlib.pyplot as plt
+hdu = fits.getdata('~/NGC5907/pp/pp_NGC59070000.fit')
+mask = fits.getdata('~/NGC5907/sky_mask/mask_0000.fit')
+masked = np.ma.masked_array(hdu, mask)
+bkg = poly_sky_model(masked, 16,'polynomial',3)
+plt.imshow(bkg, origin='lower')
+plt.show();sys.exit()
+"""
 def rbf_sky_model(data, bin):
     img_height, img_width = data.shape
 
