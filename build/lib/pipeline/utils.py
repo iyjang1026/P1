@@ -62,3 +62,29 @@ def prt_process(input):
 from astropy.visualization import simple_norm
 def norm(x, percent):
     return simple_norm(x, 'linear', percent=percent)
+
+from astropy.wcs import WCS
+from astropy.coordinates import get_icrs_coordinates
+from astropy.nddata import Cutout2D
+
+def im_crop(hdul, obj, offset=15, check_img=False, save_img=False, save_path=None):
+    hdu, hdr = hdul.data, hdul.header#fits.getdata(path+'/sky_subed/coadd.fits', header=True)
+    wcs = WCS(hdr)
+    cen_coord = get_icrs_coordinates(obj)#SkyCoord(ra=ra, dec=dec,frame='icrs', unit='deg')
+    x,y = wcs.world_to_pixel(cen_coord)#wcs.all_world2pix(ra, dec,0)#
+    area = int(2048 - ((2*offset*60)/1.89))
+    croped_hdu = Cutout2D(hdu, (x,y), area, wcs=wcs)
+    croped = croped_hdu.data
+    if check_img == True:
+        fig, ax = plt.subplots(1,1,figsize=(8,8), subplot_kw=dict(projection=wcs))
+        data = croped
+        wcs = croped_hdu.wcs
+        #print(new_hdu.header.cards)
+        ax.imshow(data, norm=norm(data, percent=90), origin='lower')#, cmap='grey_r')
+        ax.set_xlabel('R.A.')
+        ax.set_ylabel('Decl.')
+        plt.show()
+    
+    if (save_img == True) and (type(save_path)==str):
+        new_hdu = fits.PrimaryHDU(croped, wcs.to_header())
+        fits.writeto(save_path, new_hdu.data, new_hdu.header, overwrite=True)
