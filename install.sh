@@ -1,2 +1,2 @@
 python -m build
-pip install .
+python -m pip install .

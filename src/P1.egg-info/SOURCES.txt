@@ -22,6 +22,7 @@ src/pipeline/__init__.py
 src/pipeline/ellipse.py
 src/pipeline/imgqual.py
 src/pipeline/masking.py
+src/pipeline/noisechisel_codx.py
 src/pipeline/phot_calib.py
 src/pipeline/sky.py
 src/pipeline/utils.py

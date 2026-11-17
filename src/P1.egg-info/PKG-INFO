@@ -65,3 +65,17 @@ Initial folder setting
 Select location And make folder with name you want. The folder must have named folder that is "LIGHT, DARK, BIAS." The names are must be writen by Capital Alphabet.
 
 photometric catalog must be "sdss" and named "sdss_<target_name>.csv"
+
+Using Astromatic software
+---
+```bash
+scamp *.cat <scamp config> -SOLVE_PHOTOM N
+
+swarp @l.list -c <swarp config> -HEADER_SUFFIX <wcs file type>
+```
+If you want to combine multiple days data,
+```bash
+ls <day1> > l.list
+ls <day2> >> l.list
+...
+```

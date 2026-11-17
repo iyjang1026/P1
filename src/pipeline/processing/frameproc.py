@@ -145,13 +145,13 @@ class Process:
         hdr.append(('sky_sub', str(bin), 'sky subtraction' ))
         return subed, hdr
         
-    def astrometry(self, index_loc=None, radius=float, use_scamp=True):
+    def astrometry(self,refcat='ned', index_loc=None, radius=float, use_scamp=True):
         ext_type = self.ext_type
         if ext_type == 0:
             ext = '.fits'
         else :
             ext = '.fit'
-        ra,dec = radec(self.obj)
+        ra,dec = radec(self.obj, catalog=refcat)
         file = open(self.path+'/'+self.obj+'.sh', 'w')
         if use_scamp==True:
             if index_loc !=None:

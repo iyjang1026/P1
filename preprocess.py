@@ -1,4 +1,5 @@
 from pipeline.processing.frameproc import Master, Process
+from pipeline.noisechisel_codx import detect
 from astropy.io import fits
 from pipeline.utils import file_list, mkdir, save_fits
 import ray
@@ -10,8 +11,8 @@ from astropy.stats import sigma_clip, sigma_clipped_stats
 
 
 start_time = time.time()
-path = '/Users/jang-in-yeong/NGC5907'
-obj = 'NGC5907'
+path = '/Users/jang-in-yeong/Abell2634/g3'
+obj = 'Abell2634'
 ext_type = 1#.fit is 1, .fits is 0. default is 0(.fits)
 
 master = Master(path,ext_type)
@@ -40,12 +41,21 @@ def mask(i,pix,amp_r, amp_mask=True):
     save_fits(process.path+'/mask','mask_'+str(n),data=mask,ext_type=process.ext_type)
     #time.sleep(0.1)
 
+@ray.remote
+def noisechisel(i, qthresh, tilesize):
+    data = fits.getdata(hdul_list[i])
+    res = detect(data, qthresh=qthresh, tilesize=tilesize)
+    mask = res.detected.astype(np.int8)
+    n = format(i,'04')
+    save_fits(process.path+'/mask','mask_'+str(n),data=mask,ext_type=process.ext_type)
+
 amp_mask = ray.put(True)
 band = 'L'
 if band == 'u':
     amp_mask=master.ampl_mask
 
-works = [mask.remote(i,1.89,150,amp_mask) for i in range(len(hdul_list))]
+#works = [mask.remote(i,1.89,150,amp_mask) for i in range(len(hdul_list))]
+works = [noisechisel.remote(i,0.28, 30) for i in range(len(hdul_list))]
 while len(works):
     dones, works = ray.wait(works)
     ray.get(dones[0])
@@ -66,6 +76,7 @@ print(f'eta={endtime-start_time}')
 #sky subtraction
 pp_list = file_list(process.path+'/pp', process.ext_type)
 
+"""
 mkdir(process.path, 'sky_mask')
 ray.init(num_cpus=4)
 @ray.remote
@@ -86,10 +97,11 @@ while len(works):
     dones, works = ray.wait(works)
     ray.get(dones[0])
 ray.shutdown()
+"""
 
 bin=16
 pwd = mkdir(path, 'sky_subed')
-mask_list = file_list(process.path + '/sky_mask', process.ext_type)
+mask_list = file_list(process.path + '/mask', process.ext_type)
 
 @ray.remote
 def bkg_sub(pp_list, mask_list, i, order, bkg_type='median'):
@@ -128,7 +140,7 @@ print(f'eta={endtime-start_time}')
 
 
 #astrometry.sh generate
-process.astrometry(index_loc='~/solve/index4200',radius=1.5, use_scamp=True)
+process.astrometry(refcat='ned',index_loc='~/solve/index4200',radius=1.5, use_scamp=True)
 endtime = time.time()
 print(f'eta={start_time-start_time}')
 sys.exit()
