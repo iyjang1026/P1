@@ -11,8 +11,8 @@ from astropy.stats import sigma_clip, sigma_clipped_stats
 
 
 start_time = time.time()
-path = '/Users/jang-in-yeong/Abell2634/g3'
-obj = 'Abell2634'
+path = '/Users/jang-in-yeong/NGC784/r2'
+obj = 'NGC784'
 ext_type = 1#.fit is 1, .fits is 0. default is 0(.fits)
 
 master = Master(path,ext_type)
@@ -31,7 +31,7 @@ process.db_sub(bias=master.bias, dark=master.dark)
 mkdir(path, 'mask')
 hdul_list = file_list(process.path + '/db_subed', ext_type=process.ext_type)
 
-ray.init(num_cpus=4)
+ray.init(num_cpus=8)
 @ray.remote
 def mask(i,pix,amp_r, amp_mask=True):
     hdul = hdul_list[i]
@@ -70,7 +70,7 @@ flat, fhdr = fits.getdata(process.path+'/process/master_flat_median.fit', header
 mkdir(process.path, 'pp')
 process.proc(db_list, flat, f_hdr=fhdr, norm=False)
 endtime = time.time()
-print(f'eta={endtime-start_time}')
+print(f'times={endtime-start_time}')
 #sys.exit()
 
 #sky subtraction
@@ -129,18 +129,18 @@ def bkg_sub(pp_list, mask_list, i, order, bkg_type='median'):
     n = format(i, '04')
     save_fits(pwd,process.obj+str(n),data=data.astype(np.float32),hdr=hdr,ext_type=process.ext_type,norm=False)
 
-ray.init(num_cpus=4)
+ray.init(num_cpus=8)
 work = [bkg_sub.remote(pp_list,mask_list,i, 2, bkg_type='median') for i in range(len(pp_list))]
 while len(work):
     done, work = ray.wait(work)
     ray.get(done[0])
 ray.shutdown()
 endtime = time.time()
-print(f'eta={endtime-start_time}')
+print(f'times={endtime-start_time}')
 
 
 #astrometry.sh generate
 process.astrometry(refcat='ned',index_loc='~/solve/index4200',radius=1.5, use_scamp=True)
 endtime = time.time()
-print(f'eta={start_time-start_time}')
+print(f'times={start_time-start_time}')
 sys.exit()

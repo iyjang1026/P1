@@ -26,6 +26,8 @@ def file_list(path, ext_type=0):
     else :
         raise ValueError('it is not supported extension')
     file = sorted(glob.glob(path + '/*'+ext))
+    if len(file) == 0:
+        raise NameError(f'There is no {path} directory or files')
     return file
     
 def save_fits(path,name, data,hdr=None, ext_type=0, overwrite=True,norm=False):
@@ -47,7 +49,7 @@ def save_fits(path,name, data,hdr=None, ext_type=0, overwrite=True,norm=False):
 
 from astroquery.ipac.ned import Ned
 from astroquery.simbad import Simbad
-def radec(obj_name, catalog='simbad'):
+def radec(obj_name, catalog='ned'):
     if catalog == 'ned':
         tbl = Ned.query_object(obj_name)
         ra,dec = tbl['RA'][0],tbl['DEC'][0]

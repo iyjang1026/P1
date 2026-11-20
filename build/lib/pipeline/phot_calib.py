@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import astropy.io.fits as fits
 from astropy.stats import sigma_clip, sigma_clipped_stats
 from masking import region_mask, se_mask
+from noisechisel_codx import detect
 from utils import radec
 from astropy.visualization import simple_norm
 from cpnn import Variable
@@ -23,17 +24,35 @@ def stdz_mag(count,z_p,a):
         #mag = -2.5*np.log10(count) + z_p
         return a*count+z_p#mag
 
+from astropy.modeling import models, fitting
+def curvefit(mag_inst, mag_cat, err_inst,z0):
+    # generate x, y data non-uniformly spaced in x
+    # add noise to y measurements
+    x = mag_inst
+    y = mag_cat#line_orig(x)
+
+    # initialize a linear fitter
+    fit = fitting.LinearLSQFitter()
+
+    # initialize a linear model
+    line_init = models.Linear1D()
+
+    # fit the data with the fitter
+    fitted_line = fit(line_init, x, y, weights=1/(3*err_inst))
+    a,zp = fitted_line.parameters
+    return a,zp
+
 def optimizer(mag_inst, mag_cat, err_inst, z0):
     x = Variable(mag_inst)
     y = mag_cat
-    W1 = Variable(np.array(0.5))
+    W1 = Variable(np.array(1.))
     b1 = Variable(np.array(z0))
 
     def predict(x):
         y = F.linear(x, W1, b1)
         return y
 
-    lr = 0.2
+    lr = 0.01
     iters = 10000
 
     class ChiSquaredError(Function):
@@ -42,6 +61,10 @@ def optimizer(mag_inst, mag_cat, err_inst, z0):
         def forward(self, x0, x1):
             diff = ((x0 - x1)**2)/(self.sigma**2)
             y = diff.sum() #(diff**2).sum() /len(diff)
+            """
+            if np.isfinite(y)==True:
+                print(y)
+            """
             return y
 
         def backward(self, gy):
@@ -57,7 +80,6 @@ def optimizer(mag_inst, mag_cat, err_inst, z0):
     for i in range(iters):
         y_pred = predict(x)
         loss = chi_squared_error(y, y_pred)#
-
         W1.cleargrad()
         b1.cleargrad()
         loss.backward()
@@ -66,20 +88,20 @@ def optimizer(mag_inst, mag_cat, err_inst, z0):
     return W1.data, b1.data
 
 class Phot():
-    def __init__(self, path, obj,file_name, pix):
+    def __init__(self, path, obj_path,cat_path, obj,file_name, pix):
         self.path = path
         self.obj = obj
         self.file_name = file_name
         self.pix = pix
-        self.data = Table.read(path+'/sky_subed/'+self.file_name+'.cat', format='ascii', converters={'obsid':str})
-        self.sdss = Table.read(path + '/sdss_'+obj+'.csv', format='ascii') #check!! 
-        self.hdu, self.hdr = fits.getdata(path+'/sky_subed/'+file_name+'.fits', header=True)
+        self.data = Table.read(path+'/'+obj_path+'/'+self.file_name+'.cat', format='ascii', converters={'obsid':str})
+        self.sdss = Table.read(path + '/'+cat_path+'/sdss_'+obj+'.csv', format='ascii') #check!! 
+        self.hdu, self.hdr = fits.getdata(path+'/'+obj_path+'/'+file_name+'.fits', header=True)
 
     def bkg_std(self,threshold=0.5, ell_num=4, frame_size=2048,offset=15,max_pix=1024,frac=0.7,iter=2000,pos_return=False, plot=False):
         hdu = self.hdu
         hdr = self.hdr
         wcs = WCS(hdr)
-        ra, dec = radec(self.obj)
+        ra, dec = radec(self.obj, catalog='ned')
         #cen_coord = get_icrs_coordinates(self.obj)#SkyCoord(ra=ra, dec=dec,frame='icrs', unit='deg')
         x,y = wcs.all_world2pix(ra, dec,0)#wcs.world_to_pixel(cen_coord)#
         std_list = []
@@ -89,7 +111,9 @@ class Phot():
         
         croped = hdu[int(y)-area//2:int(y)+area//2, int(x)-area//2:int(x)+area//2]
         mask = np.ones_like(hdu)
-        mask[int(y)-area//2:int(y)+area//2, int(x)-area//2:int(x)+area//2] = region_mask(croped, threshold, self.pix, ampglow=False, ellipse_mask=True, ell_num=ell_num)
+        mask[int(y)-area//2:int(y)+area//2, int(x)-area//2:int(x)+area//2] = detect(croped, qthresh=0.3, tilesize=30).detected.astype(np.int8)
+        #region_mask(croped, threshold, self.pix, ampglow=False, ellipse_mask=False, ell_num=ell_num)
+
         arr = np.ma.masked_array(hdu, mask) #np.where(mask!=0, np.nan, hdu)#np.ma.masked_where(mask, np.ma.masked_equal(hdu, 0))
         ran_x, ran_y = [], []
         np.random.seed(0)
@@ -170,6 +194,7 @@ class Phot():
         z =  sigma_clip(mM, cenfunc='median', stdfunc='mad_std',sigma=3)
         t_r = m[z.mask==False]
         z0 = np.ma.median(z)
+        
         """
         obj_magerr = obj_f['MAGERR_BEST'][zm.mask==False]
         sdss_magerr = sdss_data[str('Err_'+color)][zm.mask==False]
@@ -199,9 +224,12 @@ class Phot():
         print(f'Fitted star fraction = {len(mag[z.mask==False])/len(sdss_mag):.4f}')
         print(f'Saturated star fraction = {len(saturated)/len(sdss_mag):.4f}')
         
-        a, zp = optimizer(t_r,mag[z.mask==False],fluxerr[z.mask==False],z0)
+        #a, zp = curvefit(t_r,mag[z.mask==False],fluxerr[z.mask==False],z0)
+        a,zp = optimizer(t_r,mag[z.mask==False],fluxerr[z.mask==False],z0)
+        
         def std_formular(count1,zp,a):
             return a*count1+zp
+        
         sb_lim = zp - 2.5*np.log10(1*self.bkg_noise/(self.pix*10))
         print(f'Z_p = {zp}')
         print(f'a = {a}')
@@ -219,7 +247,7 @@ class Phot():
             ax[0].axvline(x=zp, linestyle='dashed', linewidth=2, c='grey')
             ax[1].scatter(a*m+zp,sdss_mag,s=3,c='grey', label='saturated')
             ax[1].scatter(a*t_r+zp,mag[z.mask==False],s=2,c='r', label='non-saturated')
-            ax[1].legend()
+            ax[1].legend(loc=2)
             x = np.linspace(-100, 100, len(m))
             def line(x):
                 return x
@@ -229,8 +257,11 @@ class Phot():
             ax[1].set_ylabel(f'$\mu_{color}$')    
             ax[1].set_ylim(20, 10)
             ax[1].set_xlim(20,10)
-            ax[1].text(np.ma.min(a*m+zp)+3, np.max(sdss_mag)-0.5, f'$Z_p$ = {zp:.2f}'+'\n$\mu_{limit,1\sigma}$'+f' = {sb_lim:.2f}', bbox={'boxstyle':'square', 'fc':'white'})
+            ax[1].text(np.nanmin(a*m+zp)+3, np.max(sdss_mag)-0.5, f'$Z_p$ = {zp:.2f}'+'\n$\mu_{limit,1\sigma}$'+f' = {sb_lim:.2f}', bbox={'boxstyle':'square', 'fc':'white'})
             ax[1].set_title(f'{color}-band Calib of {self.obj}')
+            hdr = self.hdr
+            exptime = hdr['EXPTIME']
+            print(exptime)
             plt.show()
             
         
@@ -238,8 +269,8 @@ class Phot():
 
 
 
-def sb_limit_proc(path, obj,file_name,pix,frame_size,offset,color=str,bkg_plot=False, plot=False):
-    phot = Phot(path, obj,file_name,pix)
+def sb_limit_proc(path,obj_path, cat_path, obj,file_name,pix,frame_size,offset,color=str,bkg_plot=False, plot=False):
+    phot = Phot(path, obj_path, cat_path, obj,file_name,pix)
     exptime = np.array(phot.hdr['EXPTIME'], dtype=np.float32)
     std_noise = phot.bkg_std(frame_size=frame_size,offset=offset, max_pix=1024,frac=0.6,iter=2000, plot=bkg_plot)
     a, zp,sb_lim, num_star = phot.phot_stdz(color, plot=plot)
@@ -248,7 +279,8 @@ def sb_limit_proc(path, obj,file_name,pix,frame_size,offset,color=str,bkg_plot=F
 
 """
 path = '~/NGC5907'
-sb_limit_proc(path, 'NGC5907', 'coadd', 1.89, 2048, 10, 'r',bkg_plot=True, plot=True)
+obj_path, cat_path = '/sky_subed',''
+sb_limit_proc(path, obj_path, cat_path,'NGC5907', 'coadd', 1.89, 2048, 20, 'r',bkg_plot=True, plot=True)
 """
 """
 data_list = [['obj','exptime', 'std_noise', 'a','zp', 'sb_lim', 'num_star']]    
