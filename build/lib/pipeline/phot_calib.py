@@ -111,8 +111,8 @@ class Phot():
         
         croped = hdu[int(y)-area//2:int(y)+area//2, int(x)-area//2:int(x)+area//2]
         mask = np.ones_like(hdu)
-        mask[int(y)-area//2:int(y)+area//2, int(x)-area//2:int(x)+area//2] = detect(croped, qthresh=0.3, tilesize=30).detected.astype(np.int8)
-        #region_mask(croped, threshold, self.pix, ampglow=False, ellipse_mask=False, ell_num=ell_num)
+        mask[int(y)-area//2:int(y)+area//2, int(x)-area//2:int(x)+area//2] = region_mask(croped, threshold, self.pix, ampglow=False, ellipse_mask=True, ell_num=ell_num)
+        #detect(croped, qthresh=0.3, tilesize=30).detected.astype(np.int8)
 
         arr = np.ma.masked_array(hdu, mask) #np.where(mask!=0, np.nan, hdu)#np.ma.masked_where(mask, np.ma.masked_equal(hdu, 0))
         ran_x, ran_y = [], []
